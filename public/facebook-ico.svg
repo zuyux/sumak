@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xml:space="preserve"
+   viewBox="0 0 21 21"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="facebook-ico.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   width="21"
+   height="21"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs3" /><sodipodi:namedview
+   id="namedview3"
+   pagecolor="#505050"
+   bordercolor="#eeeeee"
+   borderopacity="1"
+   inkscape:showpageshadow="0"
+   inkscape:pageopacity="0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#505050"
+   inkscape:zoom="10.0375"
+   inkscape:cx="17.733499"
+   inkscape:cy="24.956413"
+   inkscape:window-width="1920"
+   inkscape:window-height="1011"
+   inkscape:window-x="0"
+   inkscape:window-y="32"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg3" />
+  <linearGradient
+   id="a"
+   x1="-277.375"
+   x2="-277.375"
+   y1="406.60181"
+   y2="407.5726"
+   gradientTransform="matrix(40,0,0,-39.7778,11115.001,16212.334)"
+   gradientUnits="userSpaceOnUse">
+    <stop
+   offset="0"
+   stop-color="#0062e0"
+   id="stop1" />
+    <stop
+   offset="1"
+   stop-color="#19afff"
+   id="stop2" />
+  </linearGradient>
+  <path
+   id="path2"
+   d="m 10.5,0.052295 c -5.775,0 -10.5,4.725 -10.5,10.5 0,5.1975 3.7795898,9.502909 8.76709,10.395409 l 0.06357,-0.05229 c -0.0034,-6.15e-4 -0.0069,-4.06e-4 -0.01025,-10e-4 v -7.40232 H 6.1954129 V 10.552295 H 8.820413 V 8.24209 c 0,-2.6250003 1.679385,-4.0943848 4.094385,-4.0943848 0.735,0 1.575205,0.1041796 2.310205,0.2091796 V 7.035205 h -1.364796 c -1.259998,0 -1.574998,0.629385 -1.574998,1.469385 v 2.047705 h 2.781884 l -0.471681,2.939795 h -2.310207 v 7.402295 c -0.03347,0.006 -0.06702,0.0076 -0.100485,0.01333 l 0.04819,0.03999 C 17.220409,20.055204 21,15.749795 21,10.552295 c 0,-5.775 -4.725,-10.5 -10.5,-10.5 z"
+   style="fill:#ffffff;stroke-width:0.525" />
+  
+</svg>

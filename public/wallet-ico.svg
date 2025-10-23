@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="21"
+   height="21"
+   viewBox="0 0 5.5562499 5.5562499"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="wallet-ico.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="27.038416"
+     inkscape:cx="8.8762595"
+     inkscape:cy="11.261754"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <defs
+     id="defs1" />
+  <g
+     id="layer1"
+     transform="matrix(1.3125,0,0,1.3125,-0.86816413,-0.86816411)"
+     style="fill:#000000">
+    <path
+       id="rect1"
+       mask="none"
+       style="fill:#000000;fill-opacity:0.988235;stroke-width:0.536688;stroke-linecap:square;stroke-linejoin:round;paint-order:fill markers stroke"
+       d="m 1.4552083,1.190625 c -0.4397375,0 -0.79374997,0.3540125 -0.79374997,0.79375 v 1.5875 c 0,0.4397375 0.35401247,0.79375 0.79374997,0.79375 h 2.6458334 c 0.4397374,0 0.79375,-0.3540125 0.79375,-0.79375 v -1.5875 c 0,-0.4397375 -0.3540126,-0.79375 -0.79375,-0.79375 z m 0.5291667,0.79375 h 1.5875 c 0.1465792,0 0.2645833,0.1180042 0.2645833,0.2645833 0,0.1465792 -0.1180041,0.2645834 -0.2645833,0.2645834 h -1.5875 c -0.1465792,0 -0.2645833,-0.1180042 -0.2645833,-0.2645834 0,-0.1465791 0.1180041,-0.2645833 0.2645833,-0.2645833 z" />
+  </g>
+</svg>

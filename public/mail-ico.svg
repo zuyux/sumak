@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="21"
+   height="21"
+   viewBox="0 0 5.5562499 5.5562499"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="mail-ico.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     inkscape:zoom="20.151863"
+     inkscape:cx="9.0810463"
+     inkscape:cy="15.110265"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="fillet_chamfer"
+       id="path-effect3"
+       is_visible="true"
+       lpeversion="1"
+       nodesatellites_param="F,0,0,1,0,0,0,1 @ F,0,0,1,0,0.41441572,0,1 @ F,0,0,1,0,0,0,1"
+       radius="0"
+       unit="px"
+       method="auto"
+       mode="F"
+       chamfer_steps="1"
+       flexible="false"
+       use_knot_distance="true"
+       apply_no_radius="true"
+       apply_with_radius="true"
+       only_selected="false"
+       hide_knots="false" />
+    <filter
+       id="mask-powermask-path-effect2_inverse"
+       inkscape:label="filtermask-powermask-path-effect2"
+       style="color-interpolation-filters:sRGB"
+       height="100"
+       width="100"
+       x="-50"
+       y="-50">
+      <feColorMatrix
+         id="mask-powermask-path-effect2_primitive1"
+         values="1"
+         type="saturate"
+         result="fbSourceGraphic" />
+      <feColorMatrix
+         id="mask-powermask-path-effect2_primitive2"
+         values="-1 0 0 0 1 0 -1 0 0 1 0 0 -1 0 1 0 0 0 1 0 "
+         in="fbSourceGraphic" />
+    </filter>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       id="rect1"
+       style="fill:#ffffff;fill-opacity:0.988235;stroke-width:0.704403;stroke-linecap:square;stroke-linejoin:round;paint-order:fill markers stroke"
+       d="m 1.0417969,0.69453125 c -0.16442232,0 -0.31980302,0.037851 -0.45782092,0.1051293 C 1.0692731,1.2319766 1.920467,1.968256 2.451207,2.3026694 2.498505,2.3324714 2.6357,2.3710504 2.7747338,2.3698164 2.9137676,2.3685764 3.0541561,2.3273354 3.105043,2.2952084 3.6396081,1.9577149 4.4874384,1.2281214 4.9715957,0.79898225 4.8337949,0.73196885 4.6785309,0.69453125 4.5144532,0.69453125 Z M 5.4280601,1.2337424 C 4.9508216,1.6612372 4.0710765,2.4243492 3.4387437,2.8235679 3.2379167,2.9503584 3.0083114,2.9931336 2.7794815,2.995166 2.5506516,2.9971984 2.3219616,2.9594266 2.1181847,2.8310287 1.4872479,2.4334824 0.60507928,1.6646097 0.12751162,1.2344207 0.04603441,1.3830792 1.4999999e-8,1.5541939 1.4999999e-8,1.7363281 V 3.8199218 C 1.4999999e-8,4.3970773 0.46464138,4.8617187 1.0417969,4.8617187 h 3.4726563 c 0.5771554,0 1.0417968,-0.4646414 1.0417968,-1.0417969 V 1.7363281 c 0,-0.1824913 -0.046415,-0.3537232 -0.1281899,-0.5025857 z" />
+  </g>
+</svg>

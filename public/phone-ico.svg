@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="21"
+   height="21"
+   viewBox="0 0 5.5562499 5.5562499"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   sodipodi:docname="phone-ico.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     inkscape:zoom="28.499038"
+     inkscape:cx="10.456493"
+     inkscape:cy="9.5968152"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <filter
+       id="mask-powermask-path-effect2_inverse"
+       inkscape:label="filtermask-powermask-path-effect2"
+       style="color-interpolation-filters:sRGB"
+       height="100"
+       width="100"
+       x="-50"
+       y="-50">
+      <feColorMatrix
+         id="mask-powermask-path-effect2_primitive1"
+         values="1"
+         type="saturate"
+         result="fbSourceGraphic" />
+      <feColorMatrix
+         id="mask-powermask-path-effect2_primitive2"
+         values="-1 0 0 0 1 0 -1 0 0 1 0 0 -1 0 1 0 0 0 1 0 "
+         in="fbSourceGraphic" />
+    </filter>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       id="rect1"
+       style="fill:#ffffff;fill-opacity:0.988235;stroke-width:0.704403;stroke-linecap:square;stroke-linejoin:round;paint-order:fill markers stroke"
+       d="M 1.7363282,-2.0000001e-8 C 1.1591727,-2.0000001e-8 0.69453194,0.46464134 0.69453194,1.0417966 v 3.4726561 c 0,0.5771555 0.46464176,1.0417973 1.04179626,1.0417973 h 2.0835937 c 0.5771555,0 1.0417962,-0.4646418 1.0417962,-1.0417973 V 1.0417966 C 4.8617181,0.46464134 4.3970827,-2.0000001e-8 3.8199219,-2.0000001e-8 Z M 2.7781255,0.82543409 A 0.37774019,0.37774019 0 0 1 3.1559123,1.203221 0.37774019,0.37774019 0 0 1 2.7781255,1.581008 0.37774019,0.37774019 0 0 1 2.4003387,1.203221 0.37774019,0.37774019 0 0 1 2.7781255,0.82543409 Z" />
+  </g>
+</svg>
