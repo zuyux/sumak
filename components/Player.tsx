@@ -73,7 +73,158 @@ export default function Player() {
   const [isLoading, setIsLoading] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  // Update canvas size and redraw when window resizes
+  useEffect(() => {
+    const handleResize = () => {
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        const container = canvas.parentElement;
+        if (container) {
+          canvas.width = container.clientWidth;
+          canvas.height = 60;
+        }
+      }
+    };
+
+    // Set initial size
+    handleResize();
+    
+    // Add resize listener
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // Initialize audio context and analyser
+  const initializeAudioContext = useCallback(() => {
+    if (!audioContextRef.current && audioRef.current) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 256;
+        
+        // Set crossOrigin attribute to handle CORS
+        if (audioRef.current) {
+          audioRef.current.crossOrigin = 'anonymous';
+        }
+        
+        const source = audioContextRef.current.createMediaElementSource(audioRef.current);
+        source.connect(analyserRef.current);
+        analyserRef.current.connect(audioContextRef.current.destination);
+      } catch (error) {
+        console.warn('Error initializing audio context (likely CORS restriction):', error);
+        // Continue without Web Audio API - will use fallback visualization
+      }
+    }
+  }, []);
+
+  // Visualizer animation function
+  const drawVisualizer = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Check if we have audio analysis data
+    if (analyserRef.current) {
+      try {
+        const bufferLength = analyserRef.current.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        // Check if we're getting actual data (not all zeros due to CORS)
+        const hasData = dataArray.some(value => value > 0);
+        
+        if (hasData) {
+          // Real audio data visualization with hundreds of bars
+          const numBars = Math.floor(width / 2); // 2 pixels per bar for dense visualization
+          const barWidth = width / numBars;
+
+          for (let i = 0; i < numBars; i++) {
+            // Map the bar index to the frequency data array
+            const dataIndex = Math.floor((i / numBars) * bufferLength);
+            const barHeight = (dataArray[dataIndex] / 255) * height * 0.8;
+            const x = i * barWidth;
+            const y = height - barHeight;
+
+            // Use white with 0.5 opacity
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillRect(x, y, barWidth, barHeight); // No gap to fill full width
+          }
+        } else {
+          // Fallback: animated bars when no audio data (CORS issue)
+          drawFallbackVisualization(ctx, width, height);
+        }
+      } catch {
+        // Fallback visualization if audio analysis fails
+        drawFallbackVisualization(ctx, width, height);
+      }
+    } else {
+      // Fallback visualization when no analyser available
+      drawFallbackVisualization(ctx, width, height);
+    }
+
+    if (isPlaying) {
+      animationRef.current = requestAnimationFrame(drawVisualizer);
+    }
+  }, [isPlaying]);
+
+  // Fallback visualization for when audio analysis is not available
+  const drawFallbackVisualization = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const numBars = Math.floor(width / 2); // 2 pixels per bar for dense visualization
+    const barWidth = width / numBars;
+    const time = Date.now() * 0.003; // Slow animation
+
+    for (let i = 0; i < numBars; i++) {
+      // Create animated bars using sine waves
+      const frequency1 = Math.sin(time + i * 0.02) * 0.5 + 0.5;
+      const frequency2 = Math.sin(time * 1.5 + i * 0.01) * 0.3 + 0.3;
+      const frequency3 = Math.sin(time * 0.8 + i * 0.04) * 0.2 + 0.2;
+      
+      const barHeight = (frequency1 + frequency2 + frequency3) * height * 0.6;
+      const x = i * barWidth;
+      const y = height - barHeight;
+
+      // Use white with 0.5 opacity
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fillRect(x, y, barWidth, barHeight); // No gap to fill full width
+    }
+  };
+
+  // Start visualizer when playing
+  useEffect(() => {
+    if (isPlaying && audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    
+    if (isPlaying) {
+      drawVisualizer();
+    } else if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying, drawVisualizer]);
 
   // Load metadata for a specific album
   const loadMetadata = async (album: Album): Promise<NFTMetadata | null> => {
@@ -124,6 +275,9 @@ export default function Player() {
         audioRef.current.src = audioUrl;
         audioRef.current.load(); // Reload the audio element with new source
         
+        // Initialize audio context
+        initializeAudioContext();
+        
         // If should be playing, start playback once loaded
         if (isPlaying) {
           const handleCanPlay = () => {
@@ -138,7 +292,7 @@ export default function Player() {
         }
       }
     }
-  }, [currentAlbum, isPlaying]);
+  }, [currentAlbum, isPlaying, initializeAudioContext]);
 
   // Format time from seconds to mm:ss
   const formatTime = (time: number) => {
@@ -230,8 +384,8 @@ export default function Player() {
     }
   }, [albumsWithMetadata, currentAlbum.id]);
 
-  // Handle timeline click
-  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Handle timeline click for canvas
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const newTime = (clickX / rect.width) * duration;
@@ -293,92 +447,65 @@ export default function Player() {
   }, [isPlaying, duration]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-8">
+    <div className="relative flex flex-col items-center justify-center min-h-screen text-foreground p-8 overflow-hidden">
+      {/* Blurred Background Image */}
+      {currentAlbum.metadata?.image && (
+        <>
+          <div 
+            className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${currentAlbum.metadata.image})`,
+              filter: 'blur(40px) brightness(0.4)',
+              transform: 'scale(1.1)',
+              zIndex: -20,
+            }}
+          />
+          {/* Dark overlay for better text readability */}
+          <div 
+            className="fixed inset-0 w-full h-full bg-black/10"
+            style={{ zIndex: -10 }}
+          />
+        </>
+      )}
+      
+      {/* Fallback background when no image */}
+      {!currentAlbum.metadata?.image && (
+        <div className="fixed inset-0 bg-background" style={{ zIndex: -30 }} />
+      )}
+      
+      
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
-            <p className="text-white text-lg">Loading music metadata...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+            <p className="text-foreground text-lg">Loading music metadata...</p>
           </div>
         </div>
       )}
 
-      {/* Album Covers Slider */}
-      <div className="relative w-full mb-8 overflow-hidden">
-        <div 
-          ref={sliderRef}
-          className="flex items-center justify-center gap-6 transition-transform duration-500"
-        >
-          {albumsWithMetadata.map((album) => {
-            const isActive = album.id === currentAlbum.id;
-            
-            return (
-              <div
-                key={album.id}
-                className={`cursor-pointer transition-all duration-500 ${
-                  isActive 
-                    ? 'z-10' 
-                    : 'opacity-70'
-                }`}
-                onClick={() => {
-                  // Stop current audio
-                  if (audioRef.current) {
-                    audioRef.current.pause();
-                    audioRef.current.currentTime = 0;
-                  }
-                  
-                  // Update state
-                  setCurrentTime(0);
-                  setCurrentAlbum(album);
-                  
-                  if (album.metadata) {
-                    setDuration(album.metadata.properties.duration);
-                    // Auto-play the selected track
-                    setIsPlaying(true);
-                    
-                    // Play audio after a short delay to ensure source is loaded
-                    setTimeout(() => {
-                      if (audioRef.current) {
-                        audioRef.current.play().catch((error) => {
-                          console.error('Error playing audio:', error);
-                          setIsPlaying(false);
-                        });
-                      }
-                    }, 100);
-                  }
-                }}
-              >
-                <div className={`relative overflow-hidden transition-all duration-700 w-80 h-80 ${
-                  isActive 
-                    ? `${isPlaying ? 'rounded-full' : 'rounded-lg'} ${isPlaying ? 'animate-spin-slow' : ''}` 
-                    : 'rounded-lg'
-                }`}>
-                  {album.metadata ? (
-                    <Image
-                      src={album.metadata.image}
-                      alt={`${album.metadata.properties.title} by ${album.metadata.properties.artist}`}
-                      fill
-                      className="object-contain"
-                      onError={(e) => {
-                        // Fallback to a placeholder if image fails to load
-                        const target = e.target as HTMLImageElement;
-                        target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgdmlld0JveD0iMCAwIDI1NiAyNTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0xMjggODBDMTM5LjA0NiA4MCA0OCA4OC45NTQzIDQ4IDEwMFYxNTZDNDggMTY3LjA0NiA1Ni45NTQzIDE3NiA2OCAxNzZIMTg4QzE5OS4wNDYgMTc2IDIwOCAxNjcuMDQ2IDIwOCAxNTZWMTAwQzIwOCA4OC45NTQzIDE5OS4wNDYgODAgMTg4IDgwSDEyOFoiIGZpbGw9IiM2MzY5N0EiLz4KPGNpcmNsZSBjeD0iMTI4IiBjeT0iMTI4IiByPSIyNCIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                    </div>
-                  )}
-                  {isActive && album.metadata && (
-                    <div className="absolute inset-0 bg-black/10 bg-opacity-20 flex items-center justify-center">
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Current Album Cover */}
+      <div className="relative mb-8 flex items-center justify-center">
+        <div className={`relative overflow-hidden transition-all duration-700 w-80 h-80 ${
+          isPlaying ? 'rounded-full animate-spin-slow' : 'rounded-lg'
+        }`}>
+          {currentAlbum.metadata ? (
+            <Image
+              src={currentAlbum.metadata.image}
+              alt={`${currentAlbum.metadata.properties.title} by ${currentAlbum.metadata.properties.artist}`}
+              fill
+              className="object-contain"
+              onError={(e) => {
+                // Fallback to a placeholder if image fails to load
+                const target = e.target as HTMLImageElement;
+                target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgdmlld0JveD0iMCAwIDI1NiAyNTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0xMjggODBDMTM5LjA0NiA4MCA0OCA4OC45NTQzIDQ4IDEwMFYxNTZDNDggMTY3LjA0NiA1Ni45NTQzIDE3NiA2OCAxNzZIMTg4QzE5OS4wNDYgMTc2IDIwOCAxNjcuMDQ2IDIwOCAxNTZWMTAwQzIwOCA4OC45NTQzIDE5OS4wNDYgODAgMTg4IDgwSDEyOFoiIGZpbGw9IiM2MzY5N0EiLz4KPGNpcmNsZSBjeD0iMTI4IiBjeT0iMTI4IiByPSIyNCIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -389,38 +516,34 @@ export default function Player() {
             <h2 className="text-2xl font-bold mb-2">
               {currentAlbum.metadata.properties.title || currentAlbum.metadata.name}
             </h2>
-            <p className="text-lg text-gray-300">
+            <p className="text-lg text-muted-foreground">
               {currentAlbum.metadata.properties.artist}
             </p>
-            <p className="text-sm text-gray-400 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               {currentAlbum.metadata.properties.genre} • {currentAlbum.metadata.properties.year} • {formatTime(currentAlbum.metadata.properties.duration)}
             </p>
           </>
         ) : (
           <>
-            <div className="h-8 w-48 bg-gray-700 rounded mb-2 mx-auto animate-pulse"></div>
-            <div className="h-6 w-32 bg-gray-700 rounded mx-auto animate-pulse"></div>
-            <div className="h-4 w-40 bg-gray-700 rounded mx-auto mt-2 animate-pulse"></div>
+            <div className="h-8 w-48 bg-muted rounded mb-2 mx-auto animate-pulse"></div>
+            <div className="h-6 w-32 bg-muted rounded mx-auto animate-pulse"></div>
+            <div className="h-4 w-40 bg-muted rounded mx-auto mt-2 animate-pulse"></div>
           </>
         )}
       </div>
 
-      {/* Timeline */}
-      <div className="w-full max-w-2xl mb-6">
-        <div 
-          className="relative h-2 bg-gray-600 rounded-full cursor-pointer mb-2"
-          onClick={handleTimelineClick}
-        >
-          <div 
-            className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-100"
-            style={{ width: `${(currentTime / duration) * 100}%` }}
-          />
-          <div 
-            className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg transition-all duration-100"
-            style={{ left: `${(currentTime / duration) * 100}%` }}
+      {/* Audio Visualizer Timeline */}
+      <div className="fixed bottom-3 left-0 right-0 mb-6">
+        <div className="flex flex-col items-center mb-2">
+          <canvas
+            ref={canvasRef}
+            height={60}
+            className="w-full h-16 bg-transparent"
+            onClick={handleCanvasClick}
+            style={{ cursor: 'pointer' }}
           />
         </div>
-        <div className="flex justify-between text-sm text-gray-400">
+        <div className="fixed bottom-0 justify-center text-sm text-muted-foreground mt-2">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -433,10 +556,10 @@ export default function Player() {
           disabled={!currentAlbum.metadata}
           className={`p-2 rounded-full transition-colors ${
             !currentAlbum.metadata
-              ? 'text-gray-600 cursor-not-allowed'
+              ? 'text-muted-foreground cursor-not-allowed'
               : isShuffled 
-                ? 'text-blue-400' 
-                : 'text-gray-400 hover:text-white'
+                ? 'text-primary' 
+                : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           <Shuffle size={20} />
@@ -447,8 +570,8 @@ export default function Player() {
           disabled={!currentAlbum.metadata}
           className={`p-2 transition-colors ${
             !currentAlbum.metadata
-              ? 'text-gray-600 cursor-not-allowed'
-              : 'text-gray-400 hover:text-white'
+              ? 'text-muted-foreground cursor-not-allowed'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           <SkipBack size={24} />
@@ -459,8 +582,8 @@ export default function Player() {
           disabled={!currentAlbum.metadata}
           className={`p-4 rounded-full transition-transform ${
             !currentAlbum.metadata
-              ? 'bg-gray-600 text-gray-800 cursor-not-allowed'
-              : 'bg-white text-black hover:scale-105'
+              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+              : 'bg-background text-primary-background hover:scale-105'
           }`}
         >
           {isPlaying ? <Pause size={28} /> : <Play size={28} />}
@@ -471,8 +594,8 @@ export default function Player() {
           disabled={!currentAlbum.metadata}
           className={`p-2 transition-colors ${
             !currentAlbum.metadata
-              ? 'text-gray-600 cursor-not-allowed'
-              : 'text-gray-400 hover:text-white'
+              ? 'text-muted-foreground cursor-not-allowed'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           <SkipForward size={24} />
@@ -483,10 +606,10 @@ export default function Player() {
           disabled={!currentAlbum.metadata}
           className={`p-2 rounded-full transition-colors ${
             !currentAlbum.metadata
-              ? 'text-gray-600 cursor-not-allowed'
+              ? 'text-muted-foreground cursor-not-allowed'
               : isRepeating 
-                ? 'text-blue-400' 
-                : 'text-gray-400 hover:text-white'
+                ? 'text-primary' 
+                : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           <Repeat size={20} />
@@ -495,7 +618,7 @@ export default function Player() {
 
       {/* Volume Control */}
       <div className="flex items-center gap-3 w-full max-w-xs">
-        <Volume2 size={20} className="text-gray-400" />
+        <Volume2 size={20} className="text-muted-foreground" />
         <input
           type="range"
           min="0"
@@ -503,9 +626,9 @@ export default function Player() {
           step="0.01"
           value={volume}
           onChange={handleVolumeChange}
-          className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+          className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer slider"
         />
-        <span className="text-sm text-gray-400 w-8 text-right">
+        <span className="text-sm text-muted-foreground w-8 text-right">
           {Math.round(volume * 100)}
         </span>
       </div>
@@ -537,7 +660,7 @@ export default function Player() {
           width: 16px;
           height: 16px;
           border-radius: 50%;
-          background: white;
+          background: hsl(var(--primary));
           cursor: pointer;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
@@ -546,7 +669,7 @@ export default function Player() {
           width: 16px;
           height: 16px;
           border-radius: 50%;
-          background: white;
+          background: hsl(var(--primary));
           cursor: pointer;
           border: none;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);

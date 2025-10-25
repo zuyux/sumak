@@ -1,5 +1,5 @@
-;; 4V4 NFT CONTRACT
-;; {NFT_NAME} 3D NFT
+;; RIMAY AUDIO NFT CONTRACT
+;; {NFT_NAME} Audio NFT
 
 (define-non-fungible-token {NFT_NAME} uint)
 
@@ -8,7 +8,7 @@
   ((pay (uint uint) (response bool uint))))
 
 (define-constant DEPLOYER tx-sender)
-(define-constant BUILDER-ADDRESS 'SP7FM7445TXTJEJ54GBCV2GJPCJF887NXJW2BE78)
+(define-constant BUILDER-ADDRESS 'SP193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3774CMD)
 (define-constant BUILDER-FEE u100) ;; 1%
 
 (define-constant ERR-NOT-AUTHORIZED u101)

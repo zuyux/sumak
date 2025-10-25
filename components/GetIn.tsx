@@ -91,7 +91,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   return (
     <>
   {(isSessionLoggedIn || isWalletConnected || isEncryptedAuthenticated) ? (
-        <div className='fixed top-8 right-3 md:right-8 z-101'>
+        <div className='fixed top-3 right-3 md:right-5 z-101'>
           <button
             type="button"
             className="w-9 h-9 border-1 border-[#555] bg-gradient-to-br from-muted to-muted-foreground/50 rounded-full overflow-hidden cursor-pointer select-none transition-all duration-200 flex items-center justify-center"
@@ -131,10 +131,10 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
           {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
         </div>
       ) : (
-        <div className='fixed top-7 right-4 md:right-8 z-100'>
+        <div className='fixed top-3 right-0 md:right-4 z-100'>
           <Button
             onClick={() => setShowGetInModal(true)}
-            className="title rounded-md px-2 md:px-3 py-2 md:py-2 text-xs md:text-sm bg-[#1c1] hover:bg-[#1c1c] text-primary-foreground cursor-pointer select-none"
+            className="title rounded-md px-2 md:px-6 py-4 md:py-2 text-xs md:text-sm bg-background/50 hover:bg-[#000] text-foreground cursor-pointer select-none"
             {...buttonProps}
           >
             {children || 'CONNECT'}

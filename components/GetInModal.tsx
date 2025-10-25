@@ -240,7 +240,7 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
                   className="w-full h-12 rounded-[9px] bg-accent-foreground text-background hover:text-background hover:bg-accent-foreground font-semibold text-base border border-foreground cursor-pointer flex items-center px-4"
                   type="button"
                 >
-                  <Image src="/wallet-ico.svg" alt="Billetera" width={18} height={18} className="mr-2"/>
+                  <Image src="/wallet-ico.svg" alt="Billetera" width={18} height={18} className="invert dark:invert-0  mr-2"/>
                   <span className="text-center flex-1">Conectar Billetera</span>
                 </Button>
                 {walletError && (

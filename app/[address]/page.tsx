@@ -107,35 +107,70 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
   isOwnProfile: boolean;
   mintedCount?: number;
 }) {
+  const [scrollY, setScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Calculate overlay opacity based on scroll position
+  const overlayOpacity = Math.min(0.8, 0.5 + (scrollY / 800));
+
   if (!profile) {
     return (
-      <div className="bg-background text-foreground rounded-xl p-6 mb-8">
-        <div className="flex items-center space-x-4">
-          <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center">
-            <User className="w-10 h-10 text-foreground/60" />
+      <div className="relative min-h-screen w-full mb-8">
+        {/* Default gradient background for no profile */}
+        <div className="fixed inset-0 z-0">
+          <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-purple-900/40" />
+          <div 
+            className="absolute inset-0 bg-black transition-opacity duration-300 ease-out"
+            style={{ opacity: overlayOpacity }}
+          />
+        </div>
+
+        {/* Content container */}
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-12">
+          {/* Edit button in top right */}
+          {isOwnProfile && (
+            <Link 
+              href="/settings" 
+              className="fixed top-8 right-8 p-3 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-full transition-colors z-20"
+              title="Edit Profile"
+            >
+              <Pen className="w-5 h-5 text-white" />
+            </Link>
+          )}
+
+          {/* Default profile picture */}
+          <div className="w-40 h-40 bg-white/10 rounded-full flex items-center justify-center border-4 border-white/20 mb-8 backdrop-blur-sm">
+            <User className="w-20 h-20 text-white/60" />
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">
-              {address.substring(0, 8)}...{address.substring(address.length - 8)}
-            </h2>
-            <p className="text-sm text-foreground/50 font-mono mb-1">
-              {address.substring(0, 8)}...{address.substring(address.length - 8)}
-            </p>
-            {mintedCount > 0 && (
-              <div className="flex items-center space-x-4 text-sm text-foreground/60 mb-2">
-                <span>{mintedCount} Models Minted</span>
-              </div>
-            )}
-            {isOwnProfile ? (
-              <Link 
-                href="/settings" 
-                className="inline-block mt-2 px-4 py-2 bg-white text-black rounded-lg text-sm hover:bg-white/90 transition-colors"
-              >
-                Edit Profile
-              </Link>
-            ) : (
-              <p className="text-foreground/60">No profile information available</p>
-            )}
+
+          {/* Profile info */}
+          <div className="text-center space-y-6 max-w-2xl">
+            <div className="space-y-3">
+              <h1 className="text-5xl font-bold text-white drop-shadow-lg">
+                {address.substring(0, 8)}...{address.substring(address.length - 8)}
+              </h1>
+              
+              <p className="text-lg text-white/70 font-mono bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full inline-block">
+                {address.substring(0, 8)}...{address.substring(address.length - 8)}
+              </p>
+              
+              {mintedCount > 0 && (
+                <div className="flex items-center justify-center space-x-6 text-lg text-white/80">
+                  <span className="bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                    {mintedCount} Songs Minted
+                  </span>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       </div>
@@ -143,15 +178,15 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
   }
 
   return (
-    <div className="bg-background rounded-xl mb-8 relative overflow-hidden">
-      {/* Banner Image */}
-      <div className="w-full h-48 bg-gradient-to-r from-white/5 to-white/10 relative">
+    <div className="relative min-h-screen w-full mb-8">
+      {/* Full-screen blurred background */}
+      <div className="fixed inset-0 z-0">
         {(profile.banner_cid || profile.banner_url) ? (
           profile.banner_cid ? (
             <SafariOptimizedImage
               src={getIPFSUrl(profile.banner_cid)}
               alt="Profile Banner"
-              className="w-full h-48 object-cover"
+              className="w-full h-full object-cover blur-sm scale-110"
               fill
               filename="profile-banner.jpg"
               onError={() => {
@@ -163,121 +198,123 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
               src={profile.banner_url!}
               alt="Profile Banner"
               fill
-              className="object-cover"
+              className="object-cover blur-sm scale-110"
             />
           )
         ) : (
-          <div className="w-full h-full bg-gradient-to-r from-blue-900/20 to-purple-900/20" />
+          <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-purple-900/40" />
         )}
-        
-        {/* Edit button in top right of banner */}
-        {isOwnProfile && (
-          <Link 
-            href="/settings" 
-            className="absolute top-4 right-4 p-2 bg-background/50 hover:bg-background/70 backdrop-blur-sm rounded-lg transition-colors"
-            title="Edit Profile"
-          >
-            <Pen className="w-4 h-4 text-foreground/90" />
-          </Link>
-        )}
+        {/* Dark overlay with scroll-based opacity */}
+        <div 
+          className="absolute inset-0 bg-black transition-opacity duration-300 ease-out"
+          style={{ opacity: overlayOpacity }}
+        />
       </div>
-      
-      {/* Profile Content */}
-      <div className="p-6">
-        {/* Centered Profile Layout */}
-        <div className="flex flex-col items-center text-center space-y-4">
-          {/* Avatar - Centered at top, overlapping banner */}
-          <div className="w-32 h-32 bg-white/10 rounded-full flex items-center justify-center overflow-hidden -mt-16 border-4 border-black relative z-10">
-            {(profile.avatar_cid || profile.avatar_url) ? (
-              profile.avatar_cid ? (
-                <SafariOptimizedImage
-                  src={getIPFSUrl(profile.avatar_cid)}
-                  alt={profile.display_name || profile.username || 'Profile'}
-                  className="w-32 h-32 rounded-full object-cover"
-                  width={128}
-                  height={128}
-                  filename="profile-avatar.jpg"
-                  onError={() => {
-                    console.error('Failed to load IPFS avatar image with all gateways');
-                  }}
-                />
-              ) : (
-                <Image
-                  src={profile.avatar_url!}
-                  alt={profile.display_name || profile.username || 'Profile'}
-                  width={128}
-                  height={128}
-                  className="w-32 h-32 rounded-full object-cover"
-                />
-              )
-            ) : (
-              <User className="w-16 h-16 text-foreground/60" />
-            )}
-            <User className="w-16 h-16 text-foreground/60 fallback-icon hidden" />
-          </div>
 
-          {/* Profile Info - Centered below avatar */}
+      {/* Content container */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-12">
+
+
+        {/* Profile picture centered */}
+        <div className="w-40 h-40 bg-white/10 rounded-full flex items-center justify-center overflow-hidden border-4 border-white/20 mb-8 backdrop-blur-sm">
+          {(profile.avatar_cid || profile.avatar_url) ? (
+            profile.avatar_cid ? (
+              <SafariOptimizedImage
+                src={getIPFSUrl(profile.avatar_cid)}
+                alt={profile.display_name || profile.username || 'Profile'}
+                className="w-40 h-40 rounded-full object-cover"
+                width={160}
+                height={160}
+                filename="profile-avatar.jpg"
+                onError={() => {
+                  console.error('Failed to load IPFS avatar image with all gateways');
+                }}
+              />
+            ) : (
+              <Image
+                src={profile.avatar_url!}
+                alt={profile.display_name || profile.username || 'Profile'}
+                width={160}
+                height={160}
+                className="w-40 h-40 rounded-full object-cover"
+              />
+            )
+          ) : (
+            <User className="w-20 h-20 text-white/60" />
+          )}
+        </div>
+
+        {/* Profile info centered below avatar */}
+        <div className="text-center space-y-6 max-w-2xl">
           <div className="space-y-3">
-            <h2 className="text-3xl font-bold text-foreground">
+            <h1 className="text-5xl font-bold text-white drop-shadow-lg">
               {profile.display_name || profile.username || `${address.substring(0, 8)}...${address.substring(address.length - 8)}`}
-            </h2>
+            </h1>
             
             {profile.username && profile.display_name && (
-              <p className="text-xl text-foreground/80">@{profile.username}</p>
+              <p className="text-2xl text-white/90 drop-shadow">@{profile.username}</p>
             )}
             
-            <p className="text-sm text-foreground/50 font-mono">
+            <p className="text-lg text-white/70 font-mono bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full inline-block">
               {address.substring(0, 8)}...{address.substring(address.length - 8)}
             </p>
             
-            <div className="flex items-center justify-center space-x-4 text-sm text-foreground/60">
-              {mintedCount > 0 && <span>{mintedCount} Models</span>}
+            <div className="flex items-center justify-center space-x-6 text-lg text-white/80">
+              {mintedCount > 0 && (
+                <span className="bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                  {mintedCount} Mints
+                </span>
+              )}
             </div>
           </div>
 
           {profile.tagline && (
-            <p className="text-lg text-foreground/90 max-w-md">{profile.tagline}</p>
+            <p className="text-xl text-white/90 drop-shadow bg-black/20 backdrop-blur-sm px-6 py-3 rounded-xl">
+              {profile.tagline}
+            </p>
           )}
 
           {profile.biography && (
-            <p className="text-foreground/80 max-w-lg leading-relaxed">{profile.biography}</p>
+            <p className="text-lg text-white/80 leading-relaxed bg-black/20 backdrop-blur-sm px-6 py-4 rounded-xl">
+              {profile.biography}
+            </p>
           )}
 
-          <div className="flex flex-wrap justify-center gap-4 text-sm text-foreground/60">
+          <div className="flex flex-wrap justify-center gap-4 text-white/70">
             {profile.location && (
-              <div className="flex items-center space-x-1">
-                <MapPin className="w-4 h-4" />
+              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <MapPin className="w-5 h-5" />
                 <span>{profile.location}</span>
               </div>
             )}
             {profile.occupation && (
-              <div className="flex items-center space-x-1">
-                <Briefcase className="w-4 h-4" />
+              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <Briefcase className="w-5 h-5" />
                 <span>{profile.occupation}</span>
                 {profile.company && <span> at {profile.company}</span>}
               </div>
             )}
             {profile.years_experience && profile.years_experience > 0 && (
-              <div className="flex items-center space-x-1">
-                <Calendar className="w-4 h-4" />
+              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <Calendar className="w-5 h-5" />
                 <span>{profile.years_experience} years experience</span>
               </div>
             )}
           </div>
 
           {profile.skills && profile.skills.length > 0 && (
-            <div className="max-w-2xl">
+            <div className="bg-black/20 backdrop-blur-sm px-6 py-4 rounded-xl">
               <div className="flex flex-wrap justify-center gap-2">
                 {profile.skills.slice(0, 12).map((skill) => (
                   <span
                     key={skill}
-                    className="px-3 py-1 bg-white/10 text-foreground/90 rounded-full text-xs"
+                    className="px-3 py-1 bg-white/20 text-white/90 rounded-full text-sm backdrop-blur-sm"
                   >
                     {skill}
                   </span>
                 ))}
                 {profile.skills.length > 12 && (
-                  <span className="px-3 py-1 bg-white/10 text-foreground/60 rounded-full text-xs">
+                  <span className="px-3 py-1 bg-white/10 text-white/60 rounded-full text-sm backdrop-blur-sm">
                     +{profile.skills.length - 12} more
                   </span>
                 )}
@@ -291,9 +328,10 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-1 text-foreground/60 hover:text-foreground transition-colors"
+                className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
-                <Globe className="w-4 h-4" />
+                <Globe className="w-5 h-5" />
+                <span>Website</span>
               </a>
             )}
             {profile.artstation && (
@@ -301,7 +339,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.artstation.startsWith('http') ? profile.artstation : `https://${profile.artstation}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground/60 hover:text-foreground transition-colors text-sm"
+                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
                 ArtStation
               </a>
@@ -311,7 +349,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.sketchfab.startsWith('http') ? profile.sketchfab : `https://${profile.sketchfab}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground/60 hover:text-foreground transition-colors text-sm"
+                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
                 Sketchfab
               </a>
@@ -321,7 +359,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.behance.startsWith('http') ? profile.behance : `https://${profile.behance}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground/60 hover:text-foreground transition-colors text-sm"
+                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
                 Behance
               </a>
@@ -331,7 +369,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={`https://twitter.com/${profile.twitter.replace('@', '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground/60 hover:text-foreground transition-colors text-sm"
+                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
                 Twitter
               </a>
@@ -341,7 +379,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.linkedin.startsWith('http') ? profile.linkedin : `https://${profile.linkedin}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground/60 hover:text-foreground transition-colors text-sm"
+                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
               >
                 LinkedIn
               </a>
@@ -533,47 +571,58 @@ function ProfilePage() {
   }, [address]);
 
   return (
-    <div className='mx-auto w-full px-4 md:px-8 my-12 md:my-24'>
-      {/* ProfileDisplay component for own profile */}
+    <div className='w-full'>
+      {/* ProfileDisplay component for own profile - full screen */}
       {!profileLoading && (
-        <div className="max-w-5xl mx-auto mb-8">
-          <ProfileDisplay 
-            profile={profile} 
-            address={address || ''} 
-            isOwnProfile={true} 
-            mintedCount={mintedTokens.length}
-          />
-        </div>
+        <ProfileDisplay 
+          profile={profile} 
+          address={address || ''} 
+          isOwnProfile={true} 
+          mintedCount={mintedTokens.length}
+        />
       )}
       
-      <div className='text-center items-center justify-center'>
-        {profileLoading && (
-          <div className="animate-pulse">
-            <div className="bg-background rounded-xl p-6 mb-8">
-              <div className="flex items-center space-x-4">
-                <div className="w-20 h-20 bg-white/10 rounded-full"></div>
-                <div className="space-y-2">
-                  <div className="h-4 bg-white/10 rounded w-32"></div>
-                  <div className="h-3 bg-white/10 rounded w-24"></div>
+      {/* Content section with NFT grid */}
+      <div className='bg-background px-4 md:px-8 py-12'>
+        <div className='max-w-5xl mx-auto'>
+          <div className='text-center items-center justify-center'>
+            {profileLoading && (
+              <div className="animate-pulse">
+                <div className="bg-background rounded-xl p-6 mb-8">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-20 h-20 bg-white/10 rounded-full"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-white/10 rounded w-32"></div>
+                      <div className="h-3 bg-white/10 rounded w-24"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
-      </div>
-      {!address && <p>Please connect your wallet.</p>}
-      {loading && (
-        <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
-          <LoaderCircle/>
+          {!address && <p>Please connect your wallet.</p>}
+          {loading && (
+            <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
+              <LoaderCircle/>
+            </div>
+          )}
+          {!loading && mintedTokens.length === 0 && address && (
+            <div className="text-center py-16">
+              <h2 className="text-2xl font-bold text-foreground mb-4">Your Models</h2>
+              <p className='text-foreground/60'>
+                No Minted Models yet. <Link href="/mint" className="text-blue-400 underline">Mint here</Link>
+              </p>
+            </div>
+          )}
+          {/* Grid of minted models */}
+          {mintedTokens.length > 0 && (
+            <div>
+              <h2 className="text-3xl font-bold text-foreground mb-8 text-center">My Models</h2>
+              <MintedTokensGrid mintedTokens={mintedTokens} tokenMetadata={tokenMetadata} />
+            </div>
+          )}
         </div>
-      )}
-      {!loading && mintedTokens.length === 0 && address && (
-        <p className='text-center'>
-          No Minted Models yet. <Link href="/mint" className="text-blue-400 underline">Mint here</Link>
-        </p>
-      )}
-      {/* Grid of minted models */}
-      <MintedTokensGrid mintedTokens={mintedTokens} tokenMetadata={tokenMetadata} />
+      </div>
     </div>
   );
 }
@@ -747,54 +796,65 @@ function AddressPage({ address, currentAddress }: { address: string, currentAddr
   }, [address]);
 
   return (
-    <div className="my-12 md:my-24 mx-auto w-full px-4 md:px-8">
-      <div className="max-w-5xl mx-auto">
-        {/* ProfileDisplay component for public profile */}
-        {!profileLoading && (
-          <div className="mb-8">
-            <ProfileDisplay 
-              profile={profile} 
-              address={address} 
-              isOwnProfile={false} 
-              mintedCount={mintedTokens.length}
-            />
-          </div>
-        )}
-        
-        {profileLoading && (
-          <div className="animate-pulse">
-            <div className="bg-background border border-white/20 rounded-xl p-6 mb-8">
-              <div className="flex items-center space-x-4">
-                <div className="w-20 h-20 bg-white/10 rounded-full"></div>
-                <div className="space-y-2">
-                  <div className="h-4 bg-white/10 rounded w-32"></div>
-                  <div className="h-3 bg-white/10 rounded w-24"></div>
+    <div className="w-full">
+      {/* ProfileDisplay component for public profile - full screen */}
+      {!profileLoading && (
+        <ProfileDisplay 
+          profile={profile} 
+          address={address} 
+          isOwnProfile={false} 
+          mintedCount={mintedTokens.length}
+        />
+      )}
+      
+      {/* Content section with NFT grid */}
+      <div className='bg-background px-4 md:px-8 py-12'>
+        <div className="max-w-5xl mx-auto">
+          {profileLoading && (
+            <div className="animate-pulse">
+              <div className="bg-background border border-white/20 rounded-xl p-6 mb-8">
+                <div className="flex items-center space-x-4">
+                  <div className="w-20 h-20 bg-white/10 rounded-full"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-white/10 rounded w-32"></div>
+                    <div className="h-3 bg-white/10 rounded w-24"></div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* NFT grid for this address */}
-        {loading && (
-          <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
-            <Image
-              src="/loader.gif"
-              alt="Loading..."
-              width={120}
-              height={120}
-              priority
-              unoptimized
-              className="rounded-lg"
-            />
-          </div>
-        )}
-  {!loading && mintedTokens.length === 0 && address && currentAddress && address.toLowerCase() === currentAddress.toLowerCase() && (
-          <p className='text-center text-[#555]'>
-            No Minted Models yet. <Link href="/mint" className="border-[1px] border-[#222] p-2 rounded-md text-blue-400">Mint here</Link>
-          </p>
-        )}
-      <MintedTokensGrid mintedTokens={mintedTokens} tokenMetadata={tokenMetadata} />
+          {/* NFT grid for this address */}
+          {loading && (
+            <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
+              <Image
+                src="/loader.gif"
+                alt="Loading..."
+                width={120}
+                height={120}
+                priority
+                unoptimized
+                className="rounded-lg"
+              />
+            </div>
+          )}
+          {!loading && mintedTokens.length === 0 && address && currentAddress && address.toLowerCase() === currentAddress.toLowerCase() && (
+            <div className="text-center py-16">
+              <h2 className="text-2xl font-bold text-foreground mb-4">Your Models</h2>
+              <p className='text-center text-[#555]'>
+                No Minted Models yet. <Link href="/mint" className="border-[1px] border-[#222] p-2 rounded-md text-blue-400">Mint here</Link>
+              </p>
+            </div>
+          )}
+          {mintedTokens.length > 0 && (
+            <div>
+              <h2 className="text-3xl font-bold text-foreground mb-8 text-center">
+                {address && currentAddress && address.toLowerCase() === currentAddress.toLowerCase() ? 'My Models' : 'Models'}
+              </h2>
+              <MintedTokensGrid mintedTokens={mintedTokens} tokenMetadata={tokenMetadata} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

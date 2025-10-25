@@ -21,8 +21,8 @@ export default function SupportPage() {
         <h2 className="text-xl font-semibold mb-2">Contact Us</h2>
         <p className="text-muted-foreground mb-2">
           For help, questions, or feedback, email us at{" "}
-          <a href="mailto:support@4v4.xyz" className="text-blue-400 hover:underline">
-            support@4v4.xyz
+          <a href="mailto:support@sumaq.cc" className="text-blue-400 hover:underline">
+            support@sumaq.cc
           </a>
         </p>
         <p className="text-muted-foreground text-sm">
@@ -70,10 +70,10 @@ export default function SupportPage() {
           />
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl border-[1px] border-border bg-primary text-primary-foreground hover:bg-muted hover:text-foreground transition-all duration-200 focus:outline-none cursor-pointer select-none"
+            className="w-full py-3 px-4 rounded-xl border-[1px] border-border bg-accent-foreground text-primary-foreground transition-all duration-200 focus:outline-none cursor-pointer select-none"
             disabled={sent}
           >
-            {sent ? "Message sent!" : "Send Message"}
+            {sent ? "Message sent!" : "Send"}
           </button>
         </form>
       </div>

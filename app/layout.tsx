@@ -5,6 +5,8 @@ import { GetInButton } from "@/components/GetIn";
 import Footer from "@/components/Footer";
 import { Providers } from '@/components/ui/provider';
 import { WalletProvider } from '@/components/WalletProvider';
+import { MusicPlayerProvider } from '@/components/MusicPlayerContext';
+import PersistentPlayer from '@/components/PersistentPlayer';
 import { Toaster } from "@/components/ui/sonner"
 import AppLoadingProvider from "@/components/AppLoadingProvider";
 import GlobalErrorHandler from "@/components/GlobalErrorHandler";
@@ -40,8 +42,8 @@ const lacquer = Lacquer({
 });
 
 export const metadata: Metadata = {
-  title: "RIMAY - SONIDOS ON-CHAIN",
-  description: "NO LO COMPRES!",
+  title: "SUMAQ - SONIDOS ON-CHAIN",
+  description: "DESCENTRALIZA TUS OÍDOS",
   icons: {
     icon: '/favicon.ico',
     shortcut: '/favicon-16x16.png',
@@ -73,14 +75,17 @@ export default function RootLayout({
         <GlobalErrorHandler />
         <WalletProvider>
           <Providers>
-            <AppLoadingProvider>
-              <GetInButton />
-              <Navbar />              
-              <main >
-                {children}
-              </main>
-              <Footer />
-            </AppLoadingProvider>
+            <MusicPlayerProvider>
+              <AppLoadingProvider>
+                <GetInButton />
+                <Navbar />              
+                <main className="pb-20">
+                  {children}
+                </main>
+                <Footer />
+                <PersistentPlayer />
+              </AppLoadingProvider>
+            </MusicPlayerProvider>
           </Providers>
         </WalletProvider>
         <Toaster />

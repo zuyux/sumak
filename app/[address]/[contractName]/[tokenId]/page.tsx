@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useTheme } from 'next-themes';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { fetchCallReadOnlyFunction, uintCV, cvToJSON } from '@stacks/transactions';
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 import axios from 'axios';
@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import CenterPanel from '@/components/features/avatar/CenterPanel';
 // import { getProfile } from '@/lib/profileApi';
 import { getNftsByCreator } from '@/lib/nftApi';
 
@@ -22,6 +21,7 @@ type TokenMetadata = {
   image?: string;
   external_url?: string;
   animation_url?: string;
+  audio_url?: string;
   model?: string;
   attributes?: Array<{ trait_type: string; value: string | number }>;
   properties?: Record<string, unknown>;
@@ -30,23 +30,30 @@ type TokenMetadata = {
   edition?: number;
   total_supply?: number;
   created_date?: string;
+  collection?: {
+    name?: string;
+    family?: string;
+  };
+  royalty?: {
+    percentage?: number;
+    recipient?: string;
+  };
+  created_by?: string;
+  created_at?: string;
+  minted_at?: string;
+  blockchain?: string;
+  token_standard?: string;
   [key: string]: unknown;
 };
 
 export default function NFTDetailPage() {
   const [deployerAddress, setDeployerAddress] = useState<string | null>(null);
-  const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
   const params = useParams();
   const router = useRouter();
 
   const address = params?.address as string;
   const contractName = params?.contractName as string;
   const tokenId = params?.tokenId as string;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Fetch contract deployer (original creator)
   useEffect(() => {
@@ -73,10 +80,11 @@ export default function NFTDetailPage() {
   const [owner, setOwner] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [modelUrl, setModelUrl] = useState<string>('');
-  const [modelBlobUrl, setModelBlobUrl] = useState<string>('');
-  const modelCacheKey = `nft-model-${address}-${contractName}-${tokenId}`;
-  const modelBlobUrlRef = useRef<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string>('');
+  const [audioBlobUrl, setAudioBlobUrl] = useState<string>('');
+  const audioCacheKey = `nft-audio-${address}-${contractName}-${tokenId}`;
+  const audioBlobUrlRef = useRef<string | null>(null);
   const [priceData, setPriceData] = useState<{
     stxPriceUsd: number;
     nftPriceSatoshis: number;
@@ -93,6 +101,16 @@ export default function NFTDetailPage() {
 
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
   const [creatorNfts, setCreatorNfts] = useState<TokenMetadata[]>([]);
+
+  // Helper function to format duration
+  const formatDuration = (duration: unknown): string => {
+    if (typeof duration === 'number') {
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.floor(duration % 60);
+      return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+    return String(duration);
+  };
 
   // Utility functions for Satoshi conversion
   const SATOSHIS_PER_STX = 1000; // 1 STX = 1,000,000 Satoshis
@@ -175,14 +193,14 @@ export default function NFTDetailPage() {
         setLoading(true);
         setError('');
 
-        // Try to load model from localStorage first
+        // Try to load audio from localStorage first
         try {
-          const cached = localStorage.getItem(modelCacheKey);
+          const cached = localStorage.getItem(audioCacheKey);
           if (cached) {
             const blob = new Blob([Uint8Array.from(atob(cached), c => c.charCodeAt(0))]);
             const blobUrl = URL.createObjectURL(blob);
-            setModelBlobUrl(blobUrl);
-            modelBlobUrlRef.current = blobUrl;
+            setAudioBlobUrl(blobUrl);
+            audioBlobUrlRef.current = blobUrl;
           }
         } catch { /* ignore */ }
 
@@ -191,9 +209,8 @@ export default function NFTDetailPage() {
         if (contractResponse.ok) {
           const contractData = await contractResponse.json();
           if (contractData.success && contractData.metadataCid) {
-            // Fetch metadata from IPFS using the CID and gateway URL from contract response
-            const gatewayUrl = contractData.gatewayUrl || 'https://gateway.pinata.cloud';
-            const metadataUrl = `${gatewayUrl}/ipfs/${contractData.metadataCid}`;
+            // Fetch metadata from IPFS using ipfs.io gateway
+            const metadataUrl = `https://ipfs.io/ipfs/${contractData.metadataCid}`;
 
             const response = await fetch(metadataUrl);
 
@@ -201,32 +218,58 @@ export default function NFTDetailPage() {
               const nftData: TokenMetadata = await response.json();
               setMetadata(nftData);
 
-              // Set model URL from animation_url or model field
-              let url = '';
-              if (nftData.animation_url) {
-                url = nftData.animation_url;
-              } else if (nftData.model) {
-                url = nftData.model;
+              // Set audio URL from audio_url or animation_url field
+              let audioSrc = '';
+              if (nftData.audio_url) {
+                audioSrc = nftData.audio_url;
+              } else if (nftData.animation_url) {
+                audioSrc = nftData.animation_url;
               }
-              setModelUrl(url);
+              
+              // Convert IPFS URLs to use ipfs.io gateway
+              if (audioSrc) {
+                if (audioSrc.startsWith('ipfs://')) {
+                  audioSrc = audioSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                } else if (audioSrc.includes('gateway.pinata.cloud')) {
+                  // Replace Pinata gateway with ipfs.io
+                  audioSrc = audioSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+                }
+                setAudioUrl(audioSrc);
+              }
 
-              // If not already cached, fetch and cache the model file
-              if (url && !modelBlobUrlRef.current) {
+              // Set cover image URL from image field
+              let imageSrc = '';
+              if (nftData.image) {
+                imageSrc = nftData.image;
+                if (imageSrc.startsWith('ipfs://')) {
+                  imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                } else if (imageSrc.includes('gateway.pinata.cloud')) {
+                  imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+                }
+                setCoverImageUrl(imageSrc);
+              }
+
+              // If not already cached, fetch and cache the audio file for offline playback
+              if (audioSrc && !audioBlobUrlRef.current) {
                 try {
-                  const modelRes = await fetch(url);
-                  if (modelRes.ok) {
-                    const arrayBuffer = await modelRes.arrayBuffer();
+                  const audioRes = await fetch(audioSrc);
+                  if (audioRes.ok) {
+                    const arrayBuffer = await audioRes.arrayBuffer();
                     const uint8Arr = new Uint8Array(arrayBuffer);
-                    // Store as base64 string in localStorage
-                    const b64 = btoa(String.fromCharCode(...uint8Arr));
-                    localStorage.setItem(modelCacheKey, b64);
+                    // Store as base64 string in localStorage (only for smaller files < 10MB)
+                    if (uint8Arr.length < 10 * 1024 * 1024) {
+                      const b64 = btoa(String.fromCharCode(...uint8Arr));
+                      localStorage.setItem(audioCacheKey, b64);
+                    }
                     // Create blob URL for immediate use
                     const blob = new Blob([uint8Arr]);
                     const blobUrl = URL.createObjectURL(blob);
-                    setModelBlobUrl(blobUrl);
-                    modelBlobUrlRef.current = blobUrl;
+                    setAudioBlobUrl(blobUrl);
+                    audioBlobUrlRef.current = blobUrl;
                   }
-                } catch { /* ignore */ }
+                } catch { 
+                  console.log('Failed to cache audio file, using direct URL');
+                }
               }
             }
           }
@@ -266,31 +309,55 @@ export default function NFTDetailPage() {
                 const res = await axios.get<TokenMetadata>(metadataUrl, { timeout: 10000 });
                 setMetadata(res.data);
 
-                // Set model URL from animation_url or model field
-                let url = '';
-                if (res.data.animation_url) {
-                  url = res.data.animation_url;
-                } else if (res.data.model) {
-                  url = res.data.model;
+                // Set audio URL from audio_url or animation_url field
+                let audioSrc = '';
+                if (res.data.audio_url) {
+                  audioSrc = res.data.audio_url;
+                } else if (res.data.animation_url) {
+                  audioSrc = res.data.animation_url;
                 }
-                setModelUrl(url);
-                // If not already cached, fetch and cache the model file
-                if (url && !modelBlobUrlRef.current) {
+                
+                // Convert IPFS URLs to use ipfs.io gateway
+                if (audioSrc) {
+                  if (audioSrc.startsWith('ipfs://')) {
+                    audioSrc = audioSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                  } else if (audioSrc.includes('gateway.pinata.cloud')) {
+                    audioSrc = audioSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+                  }
+                  setAudioUrl(audioSrc);
+                }
+
+                // Set cover image URL
+                let imageSrc = '';
+                if (res.data.image) {
+                  imageSrc = res.data.image;
+                  if (imageSrc.startsWith('ipfs://')) {
+                    imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                  } else if (imageSrc.includes('gateway.pinata.cloud')) {
+                    imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+                  }
+                  setCoverImageUrl(imageSrc);
+                }
+
+                // Cache audio file if available and not too large
+                if (audioSrc && !audioBlobUrlRef.current) {
                   try {
-                    const modelRes = await fetch(url);
-                    if (modelRes.ok) {
-                      const arrayBuffer = await modelRes.arrayBuffer();
+                    const audioRes = await fetch(audioSrc);
+                    if (audioRes.ok) {
+                      const arrayBuffer = await audioRes.arrayBuffer();
                       const uint8Arr = new Uint8Array(arrayBuffer);
-                      // Store as base64 string in localStorage
-                      const b64 = btoa(String.fromCharCode(...uint8Arr));
-                      localStorage.setItem(modelCacheKey, b64);
-                      // Create blob URL for immediate use
+                      if (uint8Arr.length < 10 * 1024 * 1024) {
+                        const b64 = btoa(String.fromCharCode(...uint8Arr));
+                        localStorage.setItem(audioCacheKey, b64);
+                      }
                       const blob = new Blob([uint8Arr]);
                       const blobUrl = URL.createObjectURL(blob);
-                      setModelBlobUrl(blobUrl);
-                      modelBlobUrlRef.current = blobUrl;
+                      setAudioBlobUrl(blobUrl);
+                      audioBlobUrlRef.current = blobUrl;
                     }
-                  } catch { /* ignore */ }
+                  } catch { 
+                    console.log('Failed to cache audio file');
+                  }
                 }
               } catch (err) {
                 console.log('Error fetching metadata:', err);
@@ -350,7 +417,7 @@ export default function NFTDetailPage() {
     if (address && contractName && tokenId) {
       initializeData();
     }
-  }, [address, contractName, tokenId, fetchNftPrice, modelCacheKey]);
+  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey]);
 
   useEffect(() => {
     const fetchCreatorData = async () => {
@@ -405,17 +472,7 @@ export default function NFTDetailPage() {
     );
   }
 
-  // Theme-based background and mesh ground color for CenterPanel
-  const getPanelBackground = () => {
-    if (!mounted) return '#111111'; // Default during SSR
-    const currentTheme = resolvedTheme || theme;
-    return currentTheme === 'dark' ? '#111111' : '#f1f1f1';
-  };
-  const getMeshGroundColor = () => {
-    if (!mounted) return '#222222';
-    const currentTheme = resolvedTheme || theme;
-    return currentTheme === 'dark' ? '#222222' : '#f2f2f2';
-  };
+
 
   return (
     <div className="min-h-screen pt-24 pb-16">
@@ -425,31 +482,62 @@ export default function NFTDetailPage() {
         <div className="grid grid-cols-12 gap-8 lg:gap-12">
           {/* Left Column - NFT Media */}
           <div className="col-span-12 lg:col-span-7">
-            {/* Media Display */}
-            <div className="relative aspect-square rounded-xl overflow-hidden">
-              {(modelBlobUrl || modelUrl) ? (
-                <div className="w-full h-full outline-none">
-                  <CenterPanel
-                    background={getPanelBackground()}
-                    secondaryColor="#333"
-                    modelUrl={modelBlobUrl || modelUrl}
-                    lightIntensity={11}
-                    meshGroundColor={getMeshGroundColor()}
-                  />
+            {/* Audio Player Display */}
+            <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+              {(audioUrl || audioBlobUrl) ? (
+                <div className="w-full h-full flex flex-col items-center justify-center p-8">
+                  {/* Cover Art */}
+                  {coverImageUrl ? (
+                    <div className="w-64 h-64 rounded-lg overflow-hidden mb-6 shadow-2xl relative">
+                      <Image 
+                        src={coverImageUrl} 
+                        alt={metadata?.name || 'Audio NFT Cover'} 
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-64 h-64 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-6 shadow-2xl">
+                      <div className="text-6xl">🎵</div>
+                    </div>
+                  )}
+                  
+                  {/* Audio Controls */}
+                  <div className="w-full max-w-md">
+                    <div className="text-center mb-4">
+                      <h3 className="text-white text-lg font-semibold mb-1">
+                        {metadata?.name || `Token #${tokenId}`}
+                      </h3>
+                      {metadata?.properties?.duration ? (
+                        <p className="text-white/70 text-sm">
+                          Duration: {formatDuration(metadata.properties.duration)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <audio 
+                      controls 
+                      className="w-full"
+                      src={audioBlobUrl || audioUrl}
+                      preload="metadata"
+                    >
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full bg-gradient-to-br from-gray-900 to-black">
-                  <div className="text-center text-gray-400">
-                    <div className="text-4xl mb-4">🎨</div>
-                    <p className="text-lg font-medium">No 3D Model Available</p>
-                    <p className="text-sm mt-2">This NFT doesn&apos;t have a 3D model</p>
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-white/70">
+                    <div className="text-6xl mb-4">�</div>
+                    <p className="text-lg font-medium">No Audio Available</p>
+                    <p className="text-sm mt-2">This NFT doesn&apos;t have an audio file</p>
                   </div>
                 </div>
               )}
+              
               {/* Rarity Badge */}
               {metadata?.attributes && Array.isArray(metadata.attributes) && metadata.attributes.find(attr => attr.trait_type === 'Rarity') && (
                 <div className="absolute top-4 left-4">
-                  <Badge className="bg-orange-500/20 backdrop-blur-sm">
+                  <Badge className="bg-orange-500/20 backdrop-blur-sm text-white border-orange-500/30">
                     {metadata.attributes.find(attr => attr.trait_type === 'Rarity')?.value || 'Epic'}
                   </Badge>
                 </div>
@@ -715,11 +803,16 @@ export default function NFTDetailPage() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {creatorNfts.map((nft) => (
-                <Link key={String(nft.id ?? nft.token_id)} href={`/${nft.contract_address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center">
+                <Link key={String(nft.id ?? nft.token_id)} href={`/${nft.contract_address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center relative overflow-hidden">
                   {nft.image ? (
-                    <img src={nft.image} alt={nft.name} className="object-cover w-full h-full rounded-lg" />
+                    <Image 
+                      src={nft.image} 
+                      alt={nft.name || 'NFT'} 
+                      fill
+                      className="object-cover rounded-lg" 
+                    />
                   ) : (
-                    <span className="text-white">{nft.name || 'NFT'}</span>
+                    <span className="text-white">{nft.name || 'Audio NFT'}</span>
                   )}
                 </Link>
               ))}
