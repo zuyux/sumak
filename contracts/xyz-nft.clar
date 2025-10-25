@@ -1,4 +1,4 @@
-;; RIMAY AUDIO NFT CONTRACT
+;; SUMAK AUDIO NFT CONTRACT
 ;; {NFT_NAME} Audio NFT
 
 (define-non-fungible-token {NFT_NAME} uint)

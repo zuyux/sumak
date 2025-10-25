@@ -2,44 +2,40 @@
     "name": "Shakedown",
     "description": "An experimental electronic track by Thought Beings, exploring the intersection of consciousness and digital existence through synthwave soundscapes and rhythmic patterns.",
     "image": "https://ipfs.io/ipfs/bafkreibiqfpsa5yqntbkiaomvbbvb4ok2rsxtim7uf7vazd2ejkzco3gji",
-    "audio_url": "https://ipfs.io/ipfs/bafybeiejd2f7m25hblz3b6kfykcs2vrko4ryiglycmqn5wwly2znwcwqfy",
-    "external_url": "https://rimay.xyz/shakedown",
+    "animation_url": "https://ipfs.io/ipfs/bafybeiejd2f7m25hblz3b6kfykcs2vrko4ryiglycmqn5wwly2znwcwqfy",
+    "external_url": "https://sumak.xyz/shakedown",
     "attributes": [
         {
             "trait_type": "Artist",
             "value": "Thought Beings"
         },
         {
-            "trait_type": "Genre",
+            "trait_type": "genre",
             "value": "Electronic"
         },
         {
-            "trait_type": "Release Year",
-            "value": 2018
+            "trait_type": "mood",
+            "value": "experimental"
         },
         {
-            "trait_type": "Duration",
-            "value": "4:32"
+            "trait_type": "rarity",
+            "value": "Rare"
         },
         {
-            "trait_type": "BPM",
-            "value": 128
+            "trait_type": "tempo",
+            "value": "128 BPM"
         },
         {
-            "trait_type": "Key",
+            "trait_type": "key",
             "value": "C Minor"
         },
         {
-            "trait_type": "Label",
-            "value": "Independent"
-        },
-        {
             "trait_type": "Format",
-            "value": "Digital"
+            "value": "mp3"
         },
         {
-            "trait_type": "Audio Quality",
-            "value": "320kbps MP3"
+            "trait_type": "Edition",
+            "value": 100
         },
         {
             "trait_type": "License Type",
@@ -47,31 +43,21 @@
         }
     ],
     "properties": {
-        "artist": "Thought Beings",
-        "title": "Shakedown",
-        "year": 2018,
-        "genre": "Electronic",
         "duration": 272,
-        "bpm": 128,
-        "key": "C Minor",
-        "format": "audio/mpeg",
-        "bitrate": 320,
-        "sample_rate": 44100,
-        "channels": 2,
+        "format": "audio/mp3",
         "file_size": "10.8 MB",
-        "audio_file": "https://ipfs.io/ipfs/bafybeiejd2f7m25hblz3b6kfykcs2vrko4ryiglycmqn5wwly2znwcwqfy"
+        "channels": 2,
+        "sample_rate": 44100,
+        "title": "Shakedown",
+        "audio_file": ""
     },
-    "collection": {
-        "name": "Rimay Music Collection",
-        "family": "Rimay"
-    },
-    "royalty": {
-        "percentage": 10,
-        "recipient": "SP..."
-    },
-    "created_by": "Shakedown",
-    "created_at": "2018-01-01T00:00:00Z",
-    "minted_at": "2025-10-22T00:00:00Z",
-    "blockchain": "Stacks",
-    "token_standard": "SIP-009"
+    "interoperabilityFormats": [],
+    "customizationData": {},
+    "edition": null,
+    "royalties": null,
+    "soulbound": false,
+    "location": {
+        "lat": -12.72596,
+        "lon": -77.89962
+    }
 }

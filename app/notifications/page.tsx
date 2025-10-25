@@ -7,7 +7,7 @@ export default function NotificationsPage() {
     { id: 2, title: "Profile Updated", message: "Your profile information was successfully updated." },
     { id: 3, title: "New Follower", message: "You have a new follower: @sketchfan123." },
     { id: 4, title: "Password Changed", message: "Your password was changed successfully." },
-    { id: 5, title: "Export Complete", message: "Your 3D model export is ready for download." },
+    { id: 5, title: "Export Complete", message: "Your 3D mint export is ready for download." },
   ];
 
   return (

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     const emailData = {
       from: fromEmail,
       to: [email],
-      subject: '🔐 Account Connection Link - 4V4',
+      subject: '🔐 Account Connection Link - SUMAK',
       html: `
         <!DOCTYPE html>
         <html>
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
             
             <p>Hello!</p>
             
-            <p>You requested to connect your account to 4V4. Click the button below to complete the connection process:</p>
+            <p>You requested to connect your account to SUMAK. Click the button below to complete the connection process:</p>
             
             <div style="text-align: center; margin: 30px 0;">
               <a href="${connectionUrl}" 
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             
             <p style="color: #999; font-size: 12px; text-align: center;">
-              This email was sent by 4V4 STX Platform<br>
+              This email was sent by SUMAK STX Platform<br>
               If you can't click the button, copy and paste this link: ${connectionUrl}
             </p>
           </div>

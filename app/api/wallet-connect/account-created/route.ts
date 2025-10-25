@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     }
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
     const html = `
-      <h2>Welcome to 4V4!</h2>
+      <h2>Welcome to SUMAK!</h2>
       <p>Your account has been created.</p>
       <p><strong>Address:</strong> ${address}</p>
       <p>Keep your mnemonic safe. Never share it with anyone.</p>
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     await resend.emails.send({
       from: fromEmail,
       to: [email],
-      subject: '4V4 Account Created',
+      subject: 'SUMAK Account Created',
       html,
     });
     return NextResponse.json({ success: true });

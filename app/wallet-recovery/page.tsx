@@ -115,7 +115,7 @@ export default function WalletRecoveryPage() {
         mnemonic,
         privateKey: privateKeyHex,
         address,
-        label: `4V4 Wallet - ${email}`
+        label: `SUMAK Wallet - ${email}`
       };
     } catch (error) {
       console.error('Failed to generate wallet:', error);

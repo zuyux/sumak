@@ -86,7 +86,7 @@ export default function CategorySlider({ categories }: CategorySliderProps) {
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 hover:from-blue-900/30 hover:to-purple-900/30 border border-gray-700/50 rounded-xl p-5 w-[360px] h-[360px] flex flex-col items-center justify-center transition-all duration-300">
               <div className="text-4xl mb-3">{category.icon}</div>
               <h3 className="font-semibold text-lg">{category.name}</h3>
-              <p className="text-sm text-gray-400 mt-1">{category.count} models</p>
+              <p className="text-sm text-gray-400 mt-1">{category.count} mints</p>
             </div>
           </motion.div>
         ))}

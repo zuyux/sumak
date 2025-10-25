@@ -10,7 +10,7 @@ export async function validateAndGenerateWallet(mnemonic: string) {
   const wallet = await generateWallet({ secretKey: mnemonic, password: 'default-password' });
   const account = wallet.accounts[0];
   const privateKey = account.stxPrivateKey;
-  const network = (process.env.NEXT_PUBLIC_STACKS_NETWORK as 'mainnet' | 'testnet' | 'devnet') || 'mainnet';
+  const network = (process.env.NEXT_PUBLIC_STACKS_NETWORK as 'mainnet' | 'testnet' | 'devnet') || 'testnet';
   const address = getStxAddress(account, network);
   return { privateKey, address };
 }

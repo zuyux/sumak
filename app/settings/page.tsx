@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { getProfile, upsertProfile, getSkillCategories, Profile } from '@/lib/profileApi';
 import { hasEncryptedWallet } from '@/lib/encryptedStorage';
@@ -23,6 +24,7 @@ interface SkillCategory {
 
 export default function SettingsPage() {
   const address = useCurrentAddress();
+  const router = useRouter();
   // const { currentWallet, isWalletEncrypted } = useEncryptedWallet(); // not needed
   
   // Determine wallet type - if we have an address but no encrypted wallet, it's an extension wallet
@@ -199,6 +201,11 @@ export default function SettingsPage() {
       await upsertProfile(profileData);
       setSuccess('¡Perfil guardado exitosamente!');
       toast.success('¡Perfil actualizado!');
+      
+      // Navigate to user's profile page after successful save
+      setTimeout(() => {
+        router.push(`/${address}`);
+      }, 1500); // Small delay to let user see the success message
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save profile';
       setError(errorMessage);
@@ -752,21 +759,6 @@ export default function SettingsPage() {
             >
               {saving ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
-          </div>
-          <div className="mt-2 flex gap-4">
-            <Link
-              href={address ? `/${address}` : "#"}
-              className="flex-1"
-              tabIndex={address ? 0 : -1}
-            >
-              <Button
-              type="button"
-              className="w-full bg-transparent hover:bg-accent-background text-accent-foreground hover:underline py-6 cursor-pointer"
-              disabled={!address}
-              >
-              Ir al Perfil
-              </Button>
-            </Link>
           </div>
         </form>
       </Tabs>

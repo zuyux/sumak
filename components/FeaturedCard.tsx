@@ -7,7 +7,7 @@ import { Eye, Heart, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface FeaturedCardProps {
-  model: {
+  mint: {
     id: number
     title: string
     author: string
@@ -19,7 +19,7 @@ interface FeaturedCardProps {
   }
 }
 
-export default function FeaturedCard({ model }: FeaturedCardProps) {
+export default function FeaturedCard({ mint }: FeaturedCardProps) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
@@ -46,7 +46,7 @@ export default function FeaturedCard({ model }: FeaturedCardProps) {
         >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full blur-xl animate-pulse-glow"></div>
           <div className="relative w-full h-full rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl">
-            <Image src="/01.png" alt={model.title} height={300} width={300} className="w-full h-full object-cover" />
+            <Image src="/01.png" alt={mint.title} height={300} width={300} className="w-full h-full object-cover" />
 
             {/* Overlay on hover */}
             <motion.div
@@ -58,11 +58,11 @@ export default function FeaturedCard({ model }: FeaturedCardProps) {
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center text-sm text-gray-300">
                   <Heart className="w-4 h-4 mr-1 text-red-500" />
-                  {model.likes || 243}
+                  {mint.likes || 243}
                 </div>
                 <div className="flex items-center text-sm text-gray-300">
                   <Eye className="w-4 h-4 mr-1 text-blue-400" />
-                  {model.views || 1.2}K
+                  {mint.views || 1.2}K
                 </div>
               </div>
 

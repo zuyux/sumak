@@ -14,6 +14,7 @@ import { getSigningNetwork } from "@/lib/encryptedWalletSigning";
 import { makeSTXTokenTransfer, broadcastTransaction } from "@stacks/transactions";
 import { getApiUrl } from "@/lib/stacks-api";
 import { getPersistedNetwork } from "@/lib/network";
+import { getSBTCContract } from "@/lib/contracts";
 
 import { Copy, X, LoaderCircle, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -72,8 +73,8 @@ export default function WalletPage() {
         console.log('All fungible tokens:', data.fungible_tokens);
         console.log('Available token keys:', Object.keys(data.fungible_tokens || {}));
         
-        // The full token identifier
-        const sbtcTokenKey = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
+        // The network-aware sBTC token identifier
+        const sbtcTokenKey = getSBTCContract();
         
         if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
           const balance = data.fungible_tokens[sbtcTokenKey].balance;
@@ -84,6 +85,7 @@ export default function WalletPage() {
           const allTokenKeys = Object.keys(data.fungible_tokens || {});
           const sbtcKey = allTokenKeys.find(key => 
             key.toLowerCase().includes('sbtc') || 
+            key.includes('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRC9VERC') ||
             key.includes('SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4')
           );
           

@@ -391,7 +391,7 @@ export default function ExplorePage() {
                         <Image
                           src={(() => {
                             const img = meta?.image as string;
-                            if (!img) return '/4V4-DIY.png';
+                            if (!img) return '/SUMAK-DIY.png';
                             let out = img;
                             if (img.startsWith('ipfs://')) {
                               out = `https://ipfs.io/ipfs/${img.replace('ipfs://', '')}`;
@@ -408,8 +408,8 @@ export default function ExplorePage() {
                           unoptimized
                           onError={(e) => {
                             const imgEl = e.currentTarget as HTMLImageElement;
-                            if (imgEl && imgEl.src !== window.location.origin + '/4V4-DIY.png') {
-                              imgEl.src = '/4V4-DIY.png';
+                            if (imgEl && imgEl.src !== window.location.origin + '/SUMAK-DIY.png') {
+                              imgEl.src = '/SUMAK-DIY.png';
                             }
                           }}
                         />

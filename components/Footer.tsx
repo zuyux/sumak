@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="mx-auto h-full px-4">
         <div className="flex justify-between items-center h-full">
           <Link href="/" className='flex items-center gap-1'>
-            <Image src="/RIMAY.png" alt="Rimay Logo" width={21} height={21} className="object-contain"/>
+            <Image src="/SUMAK.png" alt="Sumak Logo" width={21} height={21} className="object-contain"/>
             <span className="text-left truncate">
               SUMAQ
             </span>

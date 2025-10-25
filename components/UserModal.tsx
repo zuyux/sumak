@@ -11,6 +11,7 @@ import { getApiUrl } from '@/lib/stacks-api';
 import { getProfile, Profile } from '@/lib/profileApi';
 import { getIPFSUrl } from '@/lib/pinataUpload';
 import SafariOptimizedImage from './SafariOptimizedImage';
+import { getSBTCContract } from '@/lib/contracts';
 
 interface UserModalProps {
   onClose: () => void;
@@ -62,8 +63,8 @@ export default function UserModal({ onClose }: UserModalProps) {
         console.log('UserModal - All fungible tokens:', data.fungible_tokens);
         console.log('UserModal - Available token keys:', Object.keys(data.fungible_tokens || {}));
         
-        // The full token identifier
-        const sbtcTokenKey = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
+        // The network-aware sBTC token identifier
+        const sbtcTokenKey = getSBTCContract();
         
         if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
           const balance = data.fungible_tokens[sbtcTokenKey].balance;
@@ -74,6 +75,7 @@ export default function UserModal({ onClose }: UserModalProps) {
           const allTokenKeys = Object.keys(data.fungible_tokens || {});
           const sbtcKey = allTokenKeys.find(key => 
             key.toLowerCase().includes('sbtc') || 
+            key.includes('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRC9VERC') ||
             key.includes('SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4')
           );
           
@@ -145,7 +147,7 @@ export default function UserModal({ onClose }: UserModalProps) {
   };
 
   const handleSignOut = () => {
-    // Clear the 4v4 session and wallet address
+    // Clear the sumak session and wallet address
     if (typeof window !== "undefined") {
       localStorage.removeItem('4v4_session');
       localStorage.removeItem('walletAddress'); 
@@ -166,11 +168,14 @@ export default function UserModal({ onClose }: UserModalProps) {
     <div className="fixed top-9 right-3 z-[200]">
       <div ref={modalRef} className="relative rounded-3xl p-4 w-[340px] flex flex-col items-center shadow-xl pointer-events-auto z-[201] opacity-0 translate-y-[-24px] animate-getinmodal backdrop-blur-md border bg-white dark:bg-black border-gray-200 dark:border-white/20 text-gray-900 dark:text-white">
         <div className="flex items-center w-full mb-6">
-          {getPersistedNetwork() !== 'mainnet' && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 text-center m-3 mt-4">
-              {getPersistedNetwork().toUpperCase()}
-            </div>
-          )}
+          {/* MINT button on the left */}
+          <button
+            onClick={() => { onClose(); router.push('/mint'); }}
+            className="px-6 py-1.5 bg-background/10 border border-foreground/50 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 cursor-pointer select-none mr-3"
+          >
+            MINT
+          </button>
+          
           <Link
             href={`/${currentAddress}`}
             className="title mr-4 text-right text-gray-900 dark:text-white text-xl font-bold tracking-wider flex-1 cursor-pointer select-none"

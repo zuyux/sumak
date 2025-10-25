@@ -6,30 +6,29 @@ interface NFTMetadata {
   name: string;
   description: string;
   image: string;
-  audio_url: string;
-  external_url: string;
+  animation_url: string;
+  external_url: string | null;
   attributes: Array<{
     trait_type: string;
     value: string | number;
   }>;
   properties: {
-    artist: string;
-    title: string;
-    year: number;
-    genre: string;
     duration: number;
-    bpm: number;
-    key: string;
     format: string;
-    bitrate: number;
-    sample_rate: number;
-    channels: number;
     file_size: string;
+    channels: number;
+    sample_rate: number;
+    title: string;
     audio_file: string;
   };
-  collection: {
-    name: string;
-    family: string;
+  interoperabilityFormats: unknown[];
+  customizationData: Record<string, unknown>;
+  edition: unknown;
+  royalties: unknown;
+  soulbound: boolean;
+  location: {
+    lat: number;
+    lon: number;
   };
 }
 
@@ -69,19 +68,19 @@ const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 const albums: Album[] = [
   {
     id: '1',
-    metadataUrl: 'https://ipfs.io/ipfs/bafkreigi6s5uig63h2njdynkgdhzohp4wfmsyqzp5winunvlcdfy3pm74u'
+    metadataUrl: 'https://ipfs.io/ipfs/QmQx3XDVeWtXsnoWavLwKfh822mFCLWoQ8FFcrG4cwB6yg'
   },
   {
     id: '2', 
-    metadataUrl: 'https://ipfs.io/ipfs/bafkreigi6s5uig63h2njdynkgdhzohp4wfmsyqzp5winunvlcdfy3pm74u'
+    metadataUrl: 'https://ipfs.io/ipfs/QmeZ329grqNRx8dDVMyDvtr1afkDHFfPotaSy2fwQrwbWF'
   },
   {
     id: '3',
-    metadataUrl: 'https://ipfs.io/ipfs/bafkreigi6s5uig63h2njdynkgdhzohp4wfmsyqzp5winunvlcdfy3pm74u'
+    metadataUrl: 'https://ipfs.io/ipfs/QmPM6aCi9gLaF4rWKcMrtYrXSbS2dJrEUsvpZ6b72mLFvo'
   },
   {
     id: '4',
-    metadataUrl: 'https://ipfs.io/ipfs/bafkreigi6s5uig63h2njdynkgdhzohp4wfmsyqzp5winunvlcdfy3pm74u'
+    metadataUrl: 'https://ipfs.io/ipfs/QmeZ329grqNRx8dDVMyDvtr1afkDHFfPotaSy2fwQrwbWF'
   }
 ];
 
@@ -98,18 +97,90 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Load metadata for a specific album
-  const loadMetadata = async (album: Album): Promise<NFTMetadata | null> => {
-    try {
-      const response = await fetch(album.metadataUrl);
-      if (!response.ok) throw new Error('Failed to fetch metadata');
-      const metadata: NFTMetadata = await response.json();
-      return metadata;
-    } catch (error) {
-      console.error('Error loading metadata:', error);
-      return null;
+  // Utility function to convert any IPFS gateway URL to ipfs.io
+  const convertToIpfsIo = useCallback((url: string): string => {
+    if (!url) return url;
+    
+    // Match IPFS CID patterns in URLs
+    const ipfsPatterns = [
+      /\/ipfs\/([a-zA-Z0-9]+)/,  // Standard /ipfs/CID pattern
+      /^ipfs:\/\/([a-zA-Z0-9]+)/, // ipfs:// protocol
+      /\/([a-zA-Z0-9]{46,})$/     // Just the CID at the end
+    ];
+    
+    for (const pattern of ipfsPatterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        const cid = match[1];
+        console.log(`Converting IPFS URL: ${url} -> https://ipfs.io/ipfs/${cid}`);
+        return `https://ipfs.io/ipfs/${cid}`;
+      }
     }
-  };
+    
+    // If no IPFS pattern found, return original URL
+    return url;
+  }, []);
+
+  // Load metadata for a specific album
+  const loadMetadata = useCallback(async (album: Album): Promise<NFTMetadata | null> => {
+    const ipfsGateways = [
+      'https://ipfs.io/ipfs/',
+      'https://gateway.pinata.cloud/ipfs/',
+      'https://cloudflare-ipfs.com/ipfs/',
+      'https://dweb.link/ipfs/'
+    ];
+
+    // Extract IPFS hash from the URL
+    const getIpfsHash = (url: string): string => {
+      const match = url.match(/\/ipfs\/(.+)$/);
+      return match ? match[1] : url;
+    };
+
+    const ipfsHash = getIpfsHash(album.metadataUrl);
+
+    for (const gateway of ipfsGateways) {
+      try {
+        const url = `${gateway}${ipfsHash}`;
+        console.log(`Trying to fetch metadata from: ${url}`);
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          // Add timeout to prevent hanging requests
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (!response.ok) {
+          console.warn(`Failed to fetch from ${gateway}: ${response.status} ${response.statusText}`);
+          continue;
+        }
+        
+        const metadata: NFTMetadata = await response.json();
+        console.log(`Successfully loaded metadata from: ${gateway}`);
+        
+        // Convert any IPFS gateway URLs in the metadata to ipfs.io
+        if (metadata.image) {
+          metadata.image = convertToIpfsIo(metadata.image);
+        }
+        if (metadata.animation_url) {
+          metadata.animation_url = convertToIpfsIo(metadata.animation_url);
+        }
+        if (metadata.properties?.audio_file) {
+          metadata.properties.audio_file = convertToIpfsIo(metadata.properties.audio_file);
+        }
+        
+        return metadata;
+      } catch (error) {
+        console.warn(`Error fetching from ${gateway}:`, error);
+        continue;
+      }
+    }
+
+    console.error('Failed to load metadata from all gateways');
+    return null;
+  }, [convertToIpfsIo]);
 
   // Load metadata for all albums
   const loadAllMetadata = useCallback(async () => {
@@ -128,11 +199,29 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       if (firstAlbumWithMetadata?.metadata) {
         setCurrentAlbumState(firstAlbumWithMetadata);
         setDuration(firstAlbumWithMetadata.metadata.properties.duration);
+        
+        // Preload the first album's image to improve LCP
+        if (firstAlbumWithMetadata.metadata.image) {
+          const imageUrl = convertToIpfsIo(firstAlbumWithMetadata.metadata.image);
+          
+          const link = document.createElement('link');
+          link.rel = 'preload';
+          link.href = imageUrl;
+          link.as = 'image';
+          document.head.appendChild(link);
+          
+          // Clean up the preload link after a delay to avoid the warning
+          setTimeout(() => {
+            if (document.head.contains(link)) {
+              document.head.removeChild(link);
+            }
+          }, 10000);
+        }
       }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadMetadata, convertToIpfsIo]);
 
   // Load metadata on component mount
   useEffect(() => {
@@ -142,24 +231,37 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   // Update audio source when current album changes
   useEffect(() => {
     if (audioRef.current && currentAlbum?.metadata) {
-      const audioUrl = currentAlbum.metadata.audio_url || currentAlbum.metadata.properties.audio_file;
+      let audioUrl = currentAlbum.metadata.animation_url || currentAlbum.metadata.properties.audio_file;
+      
       if (audioUrl) {
+        // Convert any IPFS gateway URL to ipfs.io for better reliability
+        audioUrl = convertToIpfsIo(audioUrl);
+        
+        // Get current volume at the time of loading
+        const currentVolume = audioRef.current.volume;
         audioRef.current.src = audioUrl;
+        audioRef.current.volume = currentVolume; // Set volume immediately
         audioRef.current.load();
-        // Set volume after loading
-        setTimeout(() => {
+        
+        // Ensure volume is maintained after load
+        const handleLoadStart = () => {
           if (audioRef.current) {
-            audioRef.current.volume = volume;
+            audioRef.current.volume = currentVolume;
           }
-        }, 100);
+        };
+        
+        audioRef.current.addEventListener('loadstart', handleLoadStart, { once: true });
       }
     }
-  }, [currentAlbum, volume]);
+  }, [currentAlbum, convertToIpfsIo]); // Only depend on currentAlbum to avoid circular triggers
 
   // Update volume when volume state changes
   useEffect(() => {
-    if (audioRef.current && Math.abs(audioRef.current.volume - volume) > 0.01) {
+    console.log('Volume effect triggered:', { volume, audioElement: !!audioRef.current });
+    if (audioRef.current) {
+      console.log('Setting audio volume in effect to:', volume);
       audioRef.current.volume = volume;
+      console.log('Audio volume after effect:', audioRef.current.volume);
     }
   }, [volume]);
 
@@ -228,25 +330,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   }, [albumsWithMetadata, currentAlbum, isPlaying, setCurrentAlbum]);
 
   const setVolume = useCallback((newVolume: number) => {
+    console.log('setVolume called:', { newVolume, currentVolume: volume });
+    
     // Ensure volume is between 0 and 1
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
     
-    // Only update if the volume has actually changed
-    setVolumeState(currentVolume => {
-      if (Math.abs(currentVolume - clampedVolume) > 0.01) {
-        return clampedVolume;
-      }
-      return currentVolume;
-    });
+    // Always update the state - remove threshold check that was causing issues
+    setVolumeState(clampedVolume);
     
-    if (audioRef.current && Math.abs(audioRef.current.volume - clampedVolume) > 0.01) {
+    // Always update the audio element volume
+    if (audioRef.current) {
       try {
+        console.log('Setting audio element volume to:', clampedVolume);
         audioRef.current.volume = clampedVolume;
+        console.log('Audio element volume after setting:', audioRef.current.volume);
       } catch (error) {
         console.error('Error setting audio volume:', error);
       }
     }
-  }, []);
+  }, [volume]);
 
   const seekTo = useCallback((time: number) => {
     setCurrentTime(time);
@@ -263,16 +365,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleLoadedMetadata = () => {
       setDuration(audio.duration);
-      // Only set volume if it differs significantly to avoid conflicts
-      if (Math.abs(audio.volume - volume) > 0.01) {
-        audio.volume = volume;
-      }
+      // Don't force volume here - let the volume effect handle it
     };
     const handleCanPlay = () => {
-      // Only set volume if it differs significantly to avoid conflicts
-      if (Math.abs(audio.volume - volume) > 0.01) {
-        audio.volume = volume;
-      }
+      // Don't force volume here - let the volume effect handle it
     };
     const handleEnded = () => {
       setIsPlaying(false);
@@ -310,18 +406,21 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!currentAlbum?.metadata) return;
-      
       switch (event.key) {
         case 'ArrowLeft':
+          // Only handle track navigation if there's a current album
+          if (!currentAlbum?.metadata) return;
           event.preventDefault();
           previousTrack();
           break;
         case 'ArrowRight':
+          // Only handle track navigation if there's a current album
+          if (!currentAlbum?.metadata) return;
           event.preventDefault();
           nextTrack();
           break;
         case ' ': // Spacebar for play/pause
+          // Allow play/pause even without current album (it will just do nothing gracefully)
           event.preventDefault();
           togglePlayPause();
           break;

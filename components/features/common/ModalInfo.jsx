@@ -26,10 +26,10 @@ export default function ModalInfo({ isOpen, onClose }) {
           WebkitBackdropFilter: 'blur(8px)', 
         },
       }}
-      contentLabel="Model Info Modal"
+      contentLabel="Mint Info Modal"
     >
-      <h2 className="text-lg font-bold mb-4">4V4 Model Info</h2>
-      <p>Name: Default 4V4 Avatar</p>
+      <h2 className="text-lg font-bold mb-4">Sumak Mint Info</h2>
+      <p>Name: Default Sumak Avatar</p>
       <p>Style: Low-Poly</p>
       <p>Dimensions: 2m x 2m x 2m</p>
       <p>Polygon Count: ~1,000</p>

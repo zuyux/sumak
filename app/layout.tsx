@@ -42,8 +42,8 @@ const lacquer = Lacquer({
 });
 
 export const metadata: Metadata = {
-  title: "SUMAQ - SONIDOS ON-CHAIN",
-  description: "DESCENTRALIZA TUS OÍDOS",
+  title: "SUMAK - SOUNDS & SATS ⚡",
+  description: "MINT & EXCHANGE UR SOUNDS",
   icons: {
     icon: '/favicon.ico',
     shortcut: '/favicon-16x16.png',

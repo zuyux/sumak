@@ -7,25 +7,25 @@ export async function POST(request: NextRequest) {
     console.log('Files API called');
     
     const data = await request.formData();
-    const modelFile = data.get("file") as File | null;
+    const mintFile = data.get("file") as File | null;
     const imageFile = data.get("imageFile") as File | null;
 
     console.log('Received files:', {
-      modelFile: modelFile ? { name: modelFile.name, size: modelFile.size, type: modelFile.type } : null,
+      mintFile: mintFile ? { name: mintFile.name, size: mintFile.size, type: mintFile.type } : null,
       imageFile: imageFile ? { name: imageFile.name, size: imageFile.size, type: imageFile.type } : null
     });
 
-    if (!modelFile) {
-      return NextResponse.json({ error: "No model file provided" }, { status: 400 });
+    if (!mintFile) {
+      return NextResponse.json({ error: "No mint file provided" }, { status: 400 });
     }
 
     // Validate file sizes with appropriate limits
-    const maxModelSize = 300 * 1024 * 1024; // 300MB for models
+    const maxMintSize = 300 * 1024 * 1024; // 300MB for mints
     const maxImageSize = 10 * 1024 * 1024;  // 10MB for images
     
-    if (modelFile.size > maxModelSize) {
+    if (mintFile.size > maxMintSize) {
       return NextResponse.json({ 
-        error: `Model file too large. Maximum size is 300MB, received ${Math.round(modelFile.size / 1024 / 1024)}MB` 
+        error: `Mint file too large. Maximum size is 300MB, received ${Math.round(mintFile.size / 1024 / 1024)}MB` 
       }, { status: 413 });
     }
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       }, { status: 413 });
     }
 
-    console.log('Uploading model file to Pinata:', modelFile.name);
+    console.log('Uploading mint file to Pinata:', mintFile.name);
 
     // Check environment variables
     if (!process.env.PINATA_JWT) {
@@ -43,16 +43,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server configuration error - missing Pinata credentials" }, { status: 500 });
     }
 
-    // Upload the model file to Pinata with error handling
-    let modelResult;
+    // Upload the mint file to Pinata with error handling
+    let mintResult;
     try {
-      modelResult = await pinata.upload.public.file(modelFile);
+      mintResult = await pinata.upload.public.file(mintFile);
     } catch (error) {
-      console.error('Pinata model upload error:', error);
+      console.error('Pinata mint upload error:', error);
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 413) {
           return NextResponse.json({ 
-            error: "Model file too large for IPFS upload. Please reduce file size." 
+            error: "Mint file too large for IPFS upload. Please reduce file size." 
           }, { status: 413 });
         }
         if (error.response?.status === 429) {
@@ -62,16 +62,16 @@ export async function POST(request: NextRequest) {
         }
       }
       return NextResponse.json({ 
-        error: "Failed to upload model file to IPFS. Please try again." 
+        error: "Failed to upload mint file to IPFS. Please try again." 
       }, { status: 500 });
     }
     
-    if (!modelResult || !modelResult.IpfsHash) {
-      throw new Error("Failed to upload model file to Pinata");
+    if (!mintResult || !mintResult.IpfsHash) {
+      throw new Error("Failed to upload mint file to Pinata");
     }
-    const modelCid = modelResult.IpfsHash;
-    const modelUrl = `https://gateway.pinata.cloud/ipfs/${modelCid}`;
-    console.log('Model File CID:', modelCid);
+    const mintCid = mintResult.IpfsHash;
+    const mintUrl = `https://gateway.pinata.cloud/ipfs/${mintCid}`;
+    console.log('Mint File CID:', mintCid);
 
     let imageCid = null;
     let imageUrl = null;
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
       description: data.get("description") as string,
       external_url: data.get("externalUrl") as string,
       attributes: parseJSON(data.get("attributes") as string | null),
-      animation_url: modelUrl, // Link to the model file
+      animation_url: mintUrl, // Link to the mint file
       image: imageUrl, // Link to the image file (null if no image)
       interoperabilityFormats: parseJSONOrArray(data.get("interoperabilityFormats") as string | null),
       customizationData: parseJSON(data.get("customizationData") as string | null),

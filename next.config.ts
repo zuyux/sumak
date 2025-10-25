@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/ipfs/**'
       },
+      {
+        protocol: 'https',
+        hostname: 'gateway.pinata.cloud',
+        port: '',
+        pathname: '/ipfs/**'
+      },
     ],
     // Allow all modern image formats for maximum compatibility
     formats: ['image/avif', 'image/webp'],

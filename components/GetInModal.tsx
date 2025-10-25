@@ -53,7 +53,7 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
           mnemonic,
           privateKey: stxPrivateKey,
           address,
-          label: 'rimay'
+          label: 'sumak'
         };
         await createEncryptedWallet(walletData, password);
         

@@ -17,6 +17,7 @@ import { request } from '@stacks/connect';
 import { validateAndGenerateWallet } from '@/lib/walletHelpers';
 import { getApiUrl } from '@/lib/stacks-api';
 import { getPersistedNetwork } from '@/lib/network';
+import { getSBTCContract } from '@/lib/contracts';
 
 // Utility to detect wallet type
 interface WindowWithWallets {
@@ -86,6 +87,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { ChevronDown, Loader2, Plus, X, Lock } from 'lucide-react';
 import Image from 'next/image';
+import { parseBuffer } from 'music-metadata';
 
 // Dynamic import to avoid SSR issues with Leaflet
 const LocationMapModal = dynamic(() => import('@/components/LocationMapModal'), {
@@ -125,10 +127,11 @@ export default function MintPage() {
 
   const [name, setName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [artist, setArtist] = useState<string>('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [externalUrl, setExternalUrl] = useState<string>('https://4v4.xyz');
+  const [externalUrl, setExternalUrl] = useState<string>('https://sumak.app');
   const [attributes, setAttributes] = useState<string>('{"genre": "electronic", "rarity": "Rare"}');
   const [interoperabilityFormats, setInteroperabilityFormats] = useState<string>('mp3');
   
@@ -265,6 +268,7 @@ export default function MintPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [contractDeploymentStep, setContractDeploymentStep] = useState('');
   const [processingAudio, setProcessingAudio] = useState(false);
+  const [extractingCover, setExtractingCover] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   // Add sBTC balance check
   const [sbtcBalance, setSbtcBalance] = useState<number | null>(null);
@@ -301,8 +305,8 @@ export default function MintPage() {
           console.log('Mint Page - All fungible tokens:', data.fungible_tokens);
           console.log('Mint Page - Available token keys:', Object.keys(data.fungible_tokens || {}));
           
-          // The full token identifier
-          const sbtcTokenKey = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
+          // The network-aware sBTC token identifier
+          const sbtcTokenKey = getSBTCContract();
           
           if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
             const balance = data.fungible_tokens[sbtcTokenKey].balance;
@@ -313,6 +317,7 @@ export default function MintPage() {
             const allTokenKeys = Object.keys(data.fungible_tokens || {});
             const sbtcKey = allTokenKeys.find(key => 
               key.toLowerCase().includes('sbtc') || 
+              key.includes('ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRC9VERC') ||
               key.includes('SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4')
             );
             
@@ -349,7 +354,7 @@ export default function MintPage() {
     return errors;
   };
 
-  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     
     // Clean up previous preview URL
@@ -391,6 +396,118 @@ export default function MintPage() {
       setProcessingAudio(true);
       setError('Analizando archivo de audio...');
       
+      // Extract metadata using music-metadata
+      try {
+        setExtractingCover(true);
+        setError('Extrayendo metadatos y cover art...');
+        
+        // Convert file to buffer for music-metadata
+        const fileBuffer = await file.arrayBuffer();
+        const metadata = await parseBuffer(new Uint8Array(fileBuffer), file.type);
+        console.log('Extracted metadata:', metadata);
+        
+        // Extract cover art if available
+        if (metadata.common?.picture && metadata.common.picture.length > 0) {
+          const picture = metadata.common.picture[0];
+          // Convert Uint8Array to ArrayBuffer for Blob compatibility
+          const imageBuffer = new ArrayBuffer(picture.data.length);
+          const view = new Uint8Array(imageBuffer);
+          view.set(picture.data);
+          const coverBlob = new Blob([imageBuffer], { type: picture.format });
+          
+          // Create a File object from the blob for consistency with image upload
+          const coverFile = new File([coverBlob], `cover.${picture.format?.split('/')[1] || 'jpg'}`, {
+            type: picture.format || 'image/jpeg'
+          });
+          
+          // Validate cover image size (max 10MB)
+          if (coverFile.size <= 10 * 1024 * 1024) {
+            // Clean up previous image preview URL
+            if (imagePreviewUrl) {
+              URL.revokeObjectURL(imagePreviewUrl);
+            }
+            
+            setImageFile(coverFile);
+            const coverUrl = URL.createObjectURL(coverFile);
+            setImagePreviewUrl(coverUrl);
+            
+            console.log('Cover art extracted successfully:', {
+              format: picture.format,
+              size: coverFile.size,
+              description: picture.description
+            });
+            
+            toast.success('Cover art extraído automáticamente del archivo de audio');
+          } else {
+            console.warn('Cover art is too large, skipping auto-extraction');
+            toast.warning('Cover art encontrado pero es demasiado grande (>10MB)');
+          }
+        } else {
+          console.log('No cover art found in audio file');
+        }
+        
+        // Auto-fill metadata fields if available and not already filled
+        if (metadata.common?.title && !name.trim()) {
+          setName(metadata.common.title.substring(0, 23)); // Respect character limit
+          toast.success('Título extraído automáticamente del archivo de audio');
+        }
+        
+        if (metadata.common?.artist && !artist.trim()) {
+          setArtist(metadata.common.artist.substring(0, 100)); // Respect character limit
+          toast.success('Artista extraído automáticamente del archivo de audio');
+        }
+        
+        // Update properties with extracted metadata
+        const audioProps: Record<string, string | number> = {
+          duration: Math.round(metadata.format?.duration || 0),
+          format: file.type || `audio/${fileExtension.substring(1)}`,
+          file_size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        };
+        
+        // Add detailed metadata if available
+        if (metadata.format?.bitrate) {
+          audioProps.bitrate = `${metadata.format.bitrate}kbps`;
+        }
+        if (metadata.format?.sampleRate) {
+          audioProps.sample_rate = metadata.format.sampleRate;
+        }
+        if (metadata.format?.numberOfChannels) {
+          audioProps.channels = metadata.format.numberOfChannels;
+        }
+        if (metadata.common?.genre && metadata.common.genre.length > 0) {
+          // Update attributes with genre info
+          const newAttributesList = [...attributesList];
+          const genreIndex = newAttributesList.findIndex(attr => attr.key === 'genre');
+          if (genreIndex >= 0) {
+            newAttributesList[genreIndex].value = metadata.common.genre[0];
+          } else {
+            newAttributesList.push({ key: 'genre', value: metadata.common.genre[0] });
+          }
+          setAttributesList(newAttributesList);
+          updateAttributesFromList(newAttributesList);
+        }
+        if (metadata.common?.year) {
+          // Add year to attributes
+          const newAttributesList = [...attributesList];
+          const yearIndex = newAttributesList.findIndex(attr => attr.key === 'year');
+          if (yearIndex >= 0) {
+            newAttributesList[yearIndex].value = metadata.common.year.toString();
+          } else {
+            newAttributesList.push({ key: 'year', value: metadata.common.year.toString() });
+          }
+          setAttributesList(newAttributesList);
+          updateAttributesFromList(newAttributesList);
+        }
+        
+        setProperties(JSON.stringify(audioProps));
+        setExtractingCover(false);
+        
+      } catch (metadataError) {
+        console.warn('Failed to extract metadata:', metadataError);
+        setExtractingCover(false);
+        // Continue with basic audio processing if metadata extraction fails
+      }
+      
       audio.addEventListener('loadedmetadata', () => {
         setProcessingAudio(false);
         setError(''); // Clear processing message
@@ -425,23 +542,13 @@ export default function MintPage() {
           console.log('Auto-detected audio format:', detectedFormat);
         }
         
-        // Update properties with actual audio metadata
-        const audioProps = {
-          duration: Math.round(audio.duration),
-          format: file.type || `audio/${fileExtension.substring(1)}`,
-          file_size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-          channels: 2, // Default assumption
-          sample_rate: 44100 // Default assumption
-        };
-        
-        setProperties(JSON.stringify(audioProps));
-        
         console.log('Audio validation passed, metadata updated');
       });
       
       audio.addEventListener('error', (e) => {
         console.error('Error loading audio metadata:', e);
         setProcessingAudio(false);
+        setExtractingCover(false);
         setError("No se pudo cargar el archivo de audio. Verifica que sea un archivo válido.");
         setAudioFile(null);
         setAudioPreviewUrl(null);
@@ -509,6 +616,12 @@ export default function MintPage() {
       errors.description = 'La descripción es requerida';
     } else if (description.length > 500) {
       errors.description = 'Description must be less than 500 characters';
+    }
+    
+    if (!artist.trim()) {
+      errors.artist = 'El nombre del artista es requerido';
+    } else if (artist.length > 100) {
+      errors.artist = 'Artist name must be less than 100 characters';
     }
     
     if (!audioFile) {
@@ -660,7 +773,7 @@ export default function MintPage() {
   };
 
   type DeployData = {
-    modelName: string;
+    mintName: string;
     initialCid: string;
     userAddress: string;
     network: string;
@@ -1125,6 +1238,10 @@ export default function MintPage() {
       // Add standard audio metadata attributes
       allAttributes.push(
         {
+          trait_type: "Artist",
+          value: artist.trim()
+        },
+        {
           trait_type: "Format",
           value: interoperabilityFormats.trim()
         },
@@ -1142,7 +1259,7 @@ export default function MintPage() {
         name: name.trim(),
         description: description.trim(),
         image: "", // Will be filled by API with cover image IPFS hash
-        audio_url: "", // Will be filled by API with audio file IPFS hash  
+        animation_url: "", // Will be filled by API with audio file IPFS hash  
         external_url: externalUrl,
         attributes: allAttributes,
         properties: {
@@ -1152,8 +1269,8 @@ export default function MintPage() {
           audio_file: "" // Will be filled by API
         },
         collection: {
-          name: "Rimay Music Collection",
-          family: "Rimay"
+          name: "Sumak Music Collection",
+          family: "Sumak"
         },
         royalty: {
           percentage: parseInt(royalties.replace('%', '')) || 10,
@@ -1231,7 +1348,7 @@ export default function MintPage() {
       setContractDeploymentStep('Preparing contract deployment...');
 
       const deployData = {
-        modelName: name.trim(),
+        mintName: name.trim(),
         initialCid: sanitizedCid,
         userAddress: effectiveAddress!,
         network: process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet',
@@ -1432,36 +1549,61 @@ export default function MintPage() {
                       Tamaño Máximo: 100MB
                       <br/>
                       .mp3, .wav, .flac, .aac, .m4a, .ogg
+                      <br/>
+                      <span className="text-purple-400 text-xs">
+                        ✨ Cover art y metadatos extraídos automáticamente
+                      </span>
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-[#333]">
-                  <div className="text-center mb-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-2">{audioFile.name}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {(audioFile.size / (1024 * 1024)).toFixed(2)} MB
-                    </p>
-                    {processingAudio && (
-                      <p className="text-blue-500 text-xs mt-2 animate-pulse">
-                        Analizando metadatos del audio...
-                      </p>
-                    )}
-                  </div>
+                <div 
+                  className="w-full h-full flex flex-col items-center justify-center p-6 rounded-lg border border-[#333] relative overflow-hidden"
+                  style={imagePreviewUrl ? {
+                    backgroundImage: `url(${imagePreviewUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat'
+                  } : {}}
+                >
+                  {/* Overlay for better text visibility when background image is present */}
+                  {imagePreviewUrl && (
+                    <div className="absolute inset-0 bg-black bg-opacity-40 backdrop-blur-sm"></div>
+                  )}
+                  
+                  {/* Processing status messages */}
+                  {(processingAudio || extractingCover) && (
+                    <div className="relative z-10 text-center mb-6">
+                      {processingAudio && (
+                        <p className="text-blue-400 text-sm animate-pulse mb-2">
+                          Analizando metadatos del audio...
+                        </p>
+                      )}
+                      {extractingCover && (
+                        <p className="text-purple-400 text-sm animate-pulse">
+                          Extrayendo cover art...
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Audio player */}
                   {audioPreviewUrl && (
-                    <div className="w-full max-w-md">
+                    <div className="w-full max-w-md relative z-10">
                       <audio 
                         controls 
-                        className="w-full"
+                        className="w-full bg-black bg-opacity-20 rounded"
                         src={audioPreviewUrl}
                       >
                         Tu navegador no soporta el elemento de audio.
                       </audio>
                     </div>
                   )}
-                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-4 text-center">
-                    Vista previa del audio que será acuñado como NFT
-                  </p>
+                  
+                  {/* Fallback gradient background when no cover art */}
+                  {!imagePreviewUrl && (
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 -z-10"></div>
+                  )}
                 </div>
               )}
             </div>
@@ -1470,7 +1612,7 @@ export default function MintPage() {
             {/* Fixed header */}
             <div className="flex-shrink-0 mb-4">
               <CardTitle className="text-2xl font-bold" style={{ fontFamily: 'Chakra Petch, sans-serif' }}>
-                Acuñar NFT
+                Mint
               </CardTitle>
             </div>
             
@@ -1505,42 +1647,6 @@ export default function MintPage() {
               </div>
             )}
 
-            {/* Balance display */}
-            {effectiveAddress && (
-              <div className="px-3 bg-background text-foreground">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Disponible: </span>
-                  <span className={`font-mono ${
-                    checkingBalance ? 'text-gray-400' : 
-                    sbtcBalance !== null && sbtcBalance < 100 ? 'text-red-400' : 'text-green-400'
-                  }`}>
-                    {checkingBalance ? 'Checking...' : 
-                     sbtcBalance !== null ? `${sbtcBalance.toLocaleString()} Satoshis` : 'Unable to load'}
-                  </span>
-                </div>
-                {getPersistedNetwork() !== 'mainnet' && (
-                  <div className="flex items-center justify-between text-xs mt-1">
-                    <span className="text-gray-500">Red:</span>
-                    <span className="text-green-400 capitalize">
-                      {getPersistedNetwork()}
-                    </span>
-                  </div>
-                )}
-                {isSessionLocked && (
-                  <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded">
-                    <p className="text-yellow-400 text-xs flex items-center gap-1">
-                      <Lock className="h-3 w-3" />
-                      Session locked. Please unlock your wallet to continue minting.
-                    </p>
-                  </div>
-                )}
-                {sbtcBalance !== null && sbtcBalance < 100 && (
-                  <p className="text-red-400 text-xs mt-1">
-                    Low balance! You may need more sBTC for transaction fees.
-                  </p>
-                )}
-              </div>
-            )}
             
             {loadingState !== 'idle' && (
               <div className="p-4 bg-background border border-[#333] rounded-lg">
@@ -1627,7 +1733,31 @@ export default function MintPage() {
                 <p className="text-red-400 text-xs mt-1">{validationErrors.name}</p>
               )}
               <p className="text-[#555] text-right text-xs m-1">
-                {name.length}/23 characters (final contract name: ~{name.length + 9} chars)
+                {name.length}/23 characters
+              </p>
+            </div>
+
+            {/* Artist field with validation */}
+            <div>
+              <Input
+                type="text"
+                id="artist"
+                value={artist}
+                onChange={(e) => {
+                  setArtist(e.target.value);
+                  if (validationErrors.artist) {
+                    setValidationErrors(prev => ({ ...prev, artist: '' }));
+                  }
+                }}
+                placeholder="Nombre del Artista"
+                className={`border-[#333] p-6 text-lg ${validationErrors.artist ? 'border-red-500' : ''}`}
+                maxLength={100}
+              />
+              {validationErrors.artist && (
+                <p className="text-red-400 text-xs mt-1">{validationErrors.artist}</p>
+              )}
+              <p className="text-[#555] text-right text-xs m-1">
+                {artist.length}/100 characters
               </p>
             </div>
 
@@ -1648,7 +1778,7 @@ export default function MintPage() {
               {validationErrors.description && (
                 <p className="text-red-400 text-xs mt-1">{validationErrors.description}</p>
               )}
-              <p className="text-gray-400 text-xs mt-1">
+              <p className="text-[#555] text-xs text-right mt-1">
                 {description.length}/500 characters
               </p>
             </div>
@@ -1662,7 +1792,7 @@ export default function MintPage() {
 
             <div className='flex w-full'>
               <Button 
-                className='bg-foreground text-background hover:text-background hover:bg-foreground border-1 border-[#333] cursor-pointer'
+                className='bg-background text-foreground hover:text-background hover:bg-foreground border-1 border-[#333] w-full cursor-pointer'
                 onClick={toggleAdvancedOptions}
               ><ChevronDown /> {showAdvancedOptions ? 'Ocultar Opciones Avanzadas' : 'Opciones Avanzadas'}
               </Button>
@@ -2045,6 +2175,34 @@ export default function MintPage() {
               )}
             </div>
 
+            {/* Balance display */}
+            {effectiveAddress && (
+              <div className="px-3 bg-background text-foreground">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Disponible: </span>
+                  <span className={`font-mono ${
+                    checkingBalance ? 'text-gray-400' : 
+                    sbtcBalance !== null && sbtcBalance < 100 ? 'text-red-400' : 'text-green-400'
+                  }`}>
+                    {checkingBalance ? 'Checking...' : 
+                     sbtcBalance !== null ? `${sbtcBalance.toLocaleString()} Satoshis` : 'Unable to load'}
+                  </span>
+                </div>
+                {isSessionLocked && (
+                  <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded">
+                    <p className="text-yellow-400 text-xs flex items-center gap-1">
+                      <Lock className="h-3 w-3" />
+                      Session locked. Please unlock your wallet to continue minting.
+                    </p>
+                  </div>
+                )}
+                {sbtcBalance !== null && sbtcBalance < 100 && (
+                  <p className="text-red-400 text-xs mt-1">
+                    Low balance! You may need more sBTC for transaction fees.
+                  </p>
+                )}
+              </div>
+            )}
             {lastTxId && (
               <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
                 <p className="text-green-400 text-sm mb-2">¡Contrato implementado exitosamente!</p>

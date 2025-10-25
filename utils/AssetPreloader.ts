@@ -116,8 +116,8 @@ export class AssetPreloader {
     return [
       '/models/default.glb',
       '/home.svg',
-      '/4V4-DIY.svg',
-      '/4V4-DIY.png',
+      '/SUMAK-DIY.svg',
+      '/SUMAK-DIY.png',
       '/loader.gif',
       '/loaderb.gif',
       '/delta-logo.svg',

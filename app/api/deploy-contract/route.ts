@@ -102,11 +102,11 @@ async function prepareContractCode(params: DeployContractParams) {
 }
 
 // Ensure contract name is valid for Clarity: must start with a letter, contain only [a-z][a-z0-9-], max 128 chars
-function generateContractName(modelName: string): string {
+function generateContractName(mintName: string): string {
   const timestamp = Date.now().toString();
 
-  // Sanitize model name for contract naming - use lowercase per convention
-  const base = (modelName || '')
+  // Sanitize mint name for contract naming - use lowercase per convention
+  const base = (mintName || '')
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-') // Only allow lowercase letters, digits and hyphens
     .replace(/-+/g, '-')
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     console.log('Request body received:', body);
 
     const { 
-      modelName, 
+      mintName, 
       initialCid, 
       userAddress, 
       network = process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet',
@@ -147,10 +147,10 @@ export async function POST(request: NextRequest) {
       description // From form input
     } = body;
 
-    if (!modelName || !initialCid || !userAddress) {
+    if (!mintName || !initialCid || !userAddress) {
       console.error('Missing required parameters');
       return NextResponse.json(
-        { error: "Missing required parameters: modelName, initialCid, or userAddress" },
+        { error: "Missing required parameters: mintName, initialCid, or userAddress" },
         { status: 400 }
       );
     }
@@ -178,11 +178,11 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const contractName = generateContractName(modelName);
+    const contractName = generateContractName(mintName);
     
     console.log('Generated contract identifiers:');
     console.log('  - Contract Name:', contractName);
-    console.log('  - Model Name:', modelName);
+    console.log('  - Mint Name:', mintName);
     console.log('  - User Address:', userAddress);
     console.log('  - Network:', network);
     console.log('  - Initial CID:', initialCid);
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
     // Prepare contract code for client-side deployment
     const contractCode = await prepareContractCode({
       contractName,
-      nftName: modelName, // Pass the original modelName to be processed in prepareContractCode
+      nftName: mintName, // Pass the original mintName to be processed in prepareContractCode
       initialCid,
       userAddress,
       network,

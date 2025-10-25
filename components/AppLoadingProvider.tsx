@@ -49,8 +49,8 @@ export function AppLoadingProvider({
         '/loader.gif',
         '/loaderb.gif',
         '/home.svg',
-        '/4V4-DIY.svg',
-        '/4V4-DIY.png'
+        '/SUMAK-DIY.svg',
+        '/SUMAK-DIY.png'
       ];
 
       // Load home page assets as well since it's the landing page

@@ -8,7 +8,7 @@ import { mnemonicToSeed } from 'bip39';
  * @param network - One of: 'mainnet', 'testnet', 'devnet', 'mocknet'
  */
 export async function createStacksAccount(
-  network: 'mainnet' | 'testnet' | 'devnet' | 'mocknet' = (process.env.NEXT_PUBLIC_STACKS_NETWORK as 'mainnet' | 'testnet' | 'devnet') || 'mainnet'
+  network: 'mainnet' | 'testnet' | 'devnet' | 'mocknet' = (process.env.NEXT_PUBLIC_STACKS_NETWORK as 'mainnet' | 'testnet' | 'devnet') || 'testnet'
 ) {
   try {
     // Generate a new mnemonic using bip39 directly

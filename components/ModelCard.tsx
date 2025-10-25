@@ -8,8 +8,8 @@ import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-interface ModelCardProps {
-  model: {
+interface MintCardProps {
+  mint: {
     id: number
     title: string
     author: string
@@ -22,7 +22,7 @@ interface ModelCardProps {
   featured?: boolean
 }
 
-export default function ModelCard({ model, featured = false }: ModelCardProps) {
+export default function MintCard({ mint, featured = false }: MintCardProps) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
@@ -33,7 +33,7 @@ export default function ModelCard({ model, featured = false }: ModelCardProps) {
         visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
       }}
     >
-      <Link href={`/model/${model.id}`}>
+      <Link href={`/mint/${mint.id}`}>
         <Card
           className={cn(
             "group overflow-hidden border-gray-800 bg-gray-900/60 backdrop-blur-sm hover:border-gray-700 transition-all duration-300",
@@ -43,7 +43,7 @@ export default function ModelCard({ model, featured = false }: ModelCardProps) {
           onMouseLeave={() => setIsHovered(false)}
         >
           <div className="relative overflow-hidden rounded-lg">
-            {/* Model image/preview */}
+            {/* Mint image/preview */}
             <div
               className={cn(
                 "relative overflow-hidden bg-gray-800 flex items-center justify-center",
@@ -51,8 +51,8 @@ export default function ModelCard({ model, featured = false }: ModelCardProps) {
               )}
             >
               <Image
-                src={model.image || "/placeholder.svg"}
-                alt={model.title}
+                src={mint.image || "/placeholder.svg"}
+                alt={mint.title}
                 height={400}
                 width={400}
                 className={cn(
@@ -62,9 +62,9 @@ export default function ModelCard({ model, featured = false }: ModelCardProps) {
               />
 
               {/* Category badge */}
-              {model.category && (
+              {mint.category && (
                 <div className="absolute top-3 left-3 bg-gray-900/80 backdrop-blur-sm text-xs px-2 py-1 rounded-md text-blue-400 border border-gray-800">
-                  {model.category}
+                  {mint.category}
                 </div>
               )}
 
@@ -75,27 +75,27 @@ export default function ModelCard({ model, featured = false }: ModelCardProps) {
                   "opacity-0 group-hover:opacity-100 transition-opacity duration-300",
                 )}
               >
-                {model.likes && (
+                {mint.likes && (
                   <div className="flex items-center text-xs text-gray-300">
                     <Heart className="w-3 h-3 mr-1 text-red-500" />
-                    {model.likes}
+                    {mint.likes}
                   </div>
                 )}
-                {model.views && (
+                {mint.views && (
                   <div className="flex items-center text-xs text-gray-300">
                     <Eye className="w-3 h-3 mr-1 text-blue-400" />
-                    {model.views}K
+                    {mint.views}K
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Model info */}
+            {/* Mint info */}
             <div className={cn("mt-3", featured ? "px-2" : "px-1")}>
-              <h3 className={cn("font-bold text-white truncate", featured ? "text-xl" : "text-base")}>{model.title}</h3>
-              <p className="text-gray-400 text-sm mt-1">by {model.author}</p>
+              <h3 className={cn("font-bold text-white truncate", featured ? "text-xl" : "text-base")}>{mint.title}</h3>
+              <p className="text-gray-400 text-sm mt-1">by {mint.author}</p>
               <div className="flex justify-between items-center mt-2">
-                <p className="font-semibold text-blue-400">{model.price}</p>
+                <p className="font-semibold text-blue-400">{mint.price}</p>
                 {featured && (
                   <motion.button
                     className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded-md"

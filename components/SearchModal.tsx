@@ -94,10 +94,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div ref={modalRef} className="relative w-full max-w-4xl max-h-[80vh] mx-4 bg-[#1a1a1a] rounded-xl shadow-xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md">
+      <div ref={modalRef} className="relative w-full max-w-4xl max-h-[80vh] mx-4 bg-black/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b border-gray-800">
+        <div className="p-6 border-b border-gray-800/50 bg-black/30 backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-4">
             <Search className="text-gray-400" size={20} />
             <input
@@ -106,11 +106,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
               placeholder="Search music, artists, albums..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent text-white text-lg placeholder-gray-400 outline-none"
+              className="flex-1 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg px-4 py-2 text-white text-lg placeholder-gray-400 outline-none focus:border-white/20 transition-colors"
             />
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-gray-800 transition-colors cursor-pointer"
+              className="p-2 rounded-lg hover:bg-white/10 backdrop-blur-sm transition-colors cursor-pointer border border-white/10"
               aria-label="Close search"
             >
               <X className="text-gray-400" size={20} />
@@ -125,10 +125,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 backdrop-blur-sm border ${
                     activeTab === tab.id
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/50'
+                      ? 'bg-white/20 text-white border-white/30 shadow-lg'
+                      : 'text-gray-400 hover:text-gray-300 hover:bg-white/10 border-white/10 hover:border-white/20'
                   }`}
                 >
                   <Icon size={16} />
@@ -140,7 +140,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 bg-black/20 backdrop-blur-sm">
           {!searchQuery && (
             <>
               {/* Recent Searches */}
@@ -149,7 +149,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                   <h3 className="text-gray-400 text-sm font-medium tracking-wider uppercase">
                     Top Searches
                   </h3>
-                  <button className="text-blue-400 text-sm hover:underline">
+                  <button className="text-blue-400 text-sm hover:underline hover:text-blue-300 transition-colors">
                     CLEAR
                   </button>
                 </div>
@@ -157,7 +157,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                   {recentSearches.map((search) => (
                     <div
                       key={search.id}
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 cursor-pointer group"
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/10 backdrop-blur-sm border border-white/5 hover:border-white/20 cursor-pointer group transition-all duration-200"
                       onClick={onClose}
                     >
                       <div className="w-10 h-10 bg-gradient-to-br from-purple-500 via-pink-500 to-blue-500 rounded-lg flex-shrink-0"></div>
@@ -184,7 +184,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                   {trendingSongs.map((song) => (
                     <div
                       key={song.id}
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 cursor-pointer group"
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/10 backdrop-blur-sm border border-white/5 hover:border-white/20 cursor-pointer group transition-all duration-200"
                       onClick={onClose}
                     >
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex-shrink-0"></div>
@@ -217,7 +217,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                       <Link
                         key={u.username}
                         href={`/${u.address}`}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 cursor-pointer group"
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/10 backdrop-blur-sm border border-white/5 hover:border-white/20 cursor-pointer group transition-all duration-200"
                         onClick={onClose}
                       >
                         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex-shrink-0"></div>

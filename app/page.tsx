@@ -3,6 +3,7 @@
 import Footer from '@/components/Footer';
 import { Navbar } from '@/components/Navbar';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
+import OrbVisualizer from '@/components/OrbVisualizer';
 import { useRef, useEffect, useCallback } from 'react';
 
 export default function Page() {
@@ -153,6 +154,7 @@ export default function Page() {
           </div>
         )}
 
+        <OrbVisualizer/>
 
         {/* Audio Visualizer Timeline */}
         <div className="fixed bottom-6 left-0 right-0 mb-6">

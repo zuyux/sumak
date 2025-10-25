@@ -7,11 +7,11 @@ import Image from 'next/image';
 import { fetchCallReadOnlyFunction, uintCV, cvToJSON } from '@stacks/transactions';
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 import axios from 'axios';
-import { ArrowLeft, ExternalLink, Share2, Copy, Heart, RefreshCw, Eye, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Share2, Heart, RefreshCw, Eye, MoreHorizontal, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
+import { useMusicPlayer } from '@/components/MusicPlayerContext';
 // import { getProfile } from '@/lib/profileApi';
 import { getNftsByCreator } from '@/lib/nftApi';
 
@@ -22,7 +22,7 @@ type TokenMetadata = {
   external_url?: string;
   animation_url?: string;
   audio_url?: string;
-  model?: string;
+  mint?: string;
   attributes?: Array<{ trait_type: string; value: string | number }>;
   properties?: Record<string, unknown>;
   creator?: string;
@@ -60,13 +60,29 @@ export default function NFTDetailPage() {
     async function fetchDeployer() {
       if (!address || !contractName) return;
       try {
-        // Stacks API endpoint for contract info
-        const apiUrl = `https://stacks-node-api.mainnet.stacks.co/extended/v1/contract/${address}/${contractName}`;
+        // Determine the correct API URL based on network
+        const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
+        const apiUrl = networkEnv === "mainnet" 
+          ? `https://stacks-node-api.mainnet.stacks.co/extended/v1/contract/${address}/${contractName}`
+          : `https://stacks-node-api.testnet.stacks.co/extended/v1/contract/${address}/${contractName}`;
+        
         const res = await fetch(apiUrl);
         if (res.ok) {
           const data = await res.json();
           if (data.tx && data.tx.sender_address) {
             setDeployerAddress(data.tx.sender_address);
+          }
+          
+          // Store contract transaction data for activity timeline
+          if (data.tx) {
+            setContractTxData({
+              burn_block_time: data.tx.burn_block_time,
+              burn_block_time_iso: data.tx.burn_block_time_iso,
+              canonical: data.tx.canonical,
+              tx_id: data.tx.tx_id,
+              tx_status: data.tx.tx_status,
+              block_height: data.tx.block_height
+            });
           }
         }
       } catch {
@@ -101,16 +117,78 @@ export default function NFTDetailPage() {
 
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
   const [creatorNfts, setCreatorNfts] = useState<TokenMetadata[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'bids' | 'activity'>('overview');
+  const [contractTxData, setContractTxData] = useState<{
+    burn_block_time: number;
+    burn_block_time_iso: string;
+    canonical: boolean;
+    tx_id: string;
+    tx_status: string;
+    block_height: number;
+  } | null>(null);
 
-  // Helper function to format duration
-  const formatDuration = (duration: unknown): string => {
-    if (typeof duration === 'number') {
-      const minutes = Math.floor(duration / 60);
-      const seconds = Math.floor(duration % 60);
-      return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  // Music player integration
+  const { setCurrentAlbum, togglePlayPause, isPlaying, currentAlbum } = useMusicPlayer();
+
+  // Function to play audio using global music player
+  const handlePlayAudio = useCallback(() => {
+    if (!metadata || !audioUrl) return;
+
+    const albumId = `${address}-${contractName}-${tokenId}`;
+    
+    // If this track is already playing, just toggle pause/play
+    if (currentAlbum?.id === albumId) {
+      togglePlayPause();
+      return;
     }
-    return String(duration);
-  };
+
+    // Create album object for music player
+    const album = {
+      id: albumId,
+      metadataUrl: `nft:${address}/${contractName}/${tokenId}`,
+      metadata: {
+        name: metadata.name || `Token #${tokenId}`,
+        description: metadata.description || '',
+        image: coverImageUrl || metadata.image || '',
+        audio_url: audioBlobUrl || audioUrl,
+        animation_url: metadata.animation_url || '',
+        external_url: metadata.external_url || '',
+        attributes: [
+          ...(metadata.attributes || []),
+          {
+            trait_type: 'Artist',
+            value: metadata.creator || deployerAddress || 'Unknown Artist'
+          }
+        ],
+        soulbound: false, // Add this property
+        location: { lat: 0, lon: 0 }, // Add this property with correct type
+        properties: {
+          duration: 0,
+          format: 'audio/mp3',
+          file_size: '0MB',
+          channels: 2,
+          sample_rate: 44100,
+          title: metadata.name || `Token #${tokenId}`,
+          audio_file: audioBlobUrl || audioUrl,
+        },
+        interoperabilityFormats: [],
+        customizationData: {},
+        edition: null,
+        royalties: null,
+      },
+    };
+
+    // Set as current album and start playing
+    setCurrentAlbum(album);
+    
+    // Small delay to ensure the album is set before toggling play
+    setTimeout(() => {
+      if (!isPlaying) {
+        togglePlayPause(); 
+      }
+    }, 100);
+  }, [metadata, audioUrl, audioBlobUrl, coverImageUrl, address, contractName, tokenId, deployerAddress, setCurrentAlbum, togglePlayPause, isPlaying, currentAlbum]);
+
 
   // Utility functions for Satoshi conversion
   const SATOSHIS_PER_STX = 1000; // 1 STX = 1,000,000 Satoshis
@@ -443,16 +521,11 @@ export default function NFTDetailPage() {
     fetchCreatorData();
   }, [deployerAddress, address, tokenId]);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard!`);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12  mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-600 border-t-white mx-auto mb-4"></div>
         </div>
       </div>
     );
@@ -485,44 +558,40 @@ export default function NFTDetailPage() {
             {/* Audio Player Display */}
             <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
               {(audioUrl || audioBlobUrl) ? (
-                <div className="w-full h-full flex flex-col items-center justify-center p-8">
+                <div className="w-full h-full flex items-center justify-center">
                   {/* Cover Art */}
                   {coverImageUrl ? (
-                    <div className="w-64 h-64 rounded-lg overflow-hidden mb-6 shadow-2xl relative">
+                    <div className="w-full h-full rounded-lg overflow-hidden shadow-2xl relative group cursor-pointer" onClick={handlePlayAudio}>
                       <Image 
                         src={coverImageUrl} 
                         alt={metadata?.name || 'Audio NFT Cover'} 
                         fill
                         className="object-cover"
                       />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                        <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full p-4">
+                          {isPlaying && currentAlbum?.id === `${address}-${contractName}-${tokenId}` ? (
+                            <Pause className="w-8 h-8 text-white" />
+                          ) : (
+                            <Play className="w-8 h-8 text-white" />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <div className="w-64 h-64 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-6 shadow-2xl">
+                    <div className="w-full h-full rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl group cursor-pointer relative" onClick={handlePlayAudio}>
                       <div className="text-6xl">🎵</div>
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                        <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full p-4">
+                          {isPlaying && currentAlbum?.id === `${address}-${contractName}-${tokenId}` ? (
+                            <Pause className="w-8 h-8 text-white" />
+                          ) : (
+                            <Play className="w-8 h-8 text-white" />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
-                  
-                  {/* Audio Controls */}
-                  <div className="w-full max-w-md">
-                    <div className="text-center mb-4">
-                      <h3 className="text-white text-lg font-semibold mb-1">
-                        {metadata?.name || `Token #${tokenId}`}
-                      </h3>
-                      {metadata?.properties?.duration ? (
-                        <p className="text-white/70 text-sm">
-                          Duration: {formatDuration(metadata.properties.duration)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <audio 
-                      controls 
-                      className="w-full"
-                      src={audioBlobUrl || audioUrl}
-                      preload="metadata"
-                    >
-                      Your browser does not support the audio element.
-                    </audio>
-                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full">
@@ -548,10 +617,20 @@ export default function NFTDetailPage() {
             <div className="mt-8">
               <div className="border-b border-border">
                 <nav className="flex space-x-8">
-                  <button className="py-3 px-1  font-medium text-sm text-primary">
+                  <button 
+                    onClick={() => setActiveTab('overview')}
+                    className={`py-3 px-1 font-medium text-sm transition-colors ${
+                      activeTab === 'overview' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
                     Overview
                   </button>
-                  <button className="py-3 px-1  font-medium text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <button 
+                    onClick={() => setActiveTab('properties')}
+                    className={`py-3 px-1 font-medium text-sm transition-colors ${
+                      activeTab === 'properties' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
                     Properties
                     {metadata?.attributes && Array.isArray(metadata.attributes) && metadata.attributes.length > 0 && (
                       <Badge variant="secondary" className="ml-2 text-xs">
@@ -559,10 +638,20 @@ export default function NFTDetailPage() {
                       </Badge>
                     )}
                   </button>
-                  <button className="py-3 px-1  font-medium text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <button 
+                    onClick={() => setActiveTab('bids')}
+                    className={`py-3 px-1 font-medium text-sm transition-colors ${
+                      activeTab === 'bids' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
                     Bids
                   </button>
-                  <button className="py-3 px-1  font-medium text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <button 
+                    onClick={() => setActiveTab('activity')}
+                    className={`py-3 px-1 font-medium text-sm transition-colors ${
+                      activeTab === 'activity' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
                     Activity
                   </button>
                 </nav>
@@ -570,59 +659,356 @@ export default function NFTDetailPage() {
 
               {/* Tab Content */}
               <div className="mt-8 space-y-8">
-                {/* Description */}
-                {metadata?.description && (
+                {activeTab === 'overview' && (
+                  <>
+                    {/* Description */}
+                    {metadata?.description && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4">Description</h3>
+                        <p className="text-muted-foreground leading-relaxed text-sm">
+                          {metadata.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Details Section */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-6">Details</h3>
+                      <div className="space-y-4">
+                        <a
+                          href={`https://explorer.hiro.so/txid/${address}.${contractName}?chain=testnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <Eye className="w-4 h-4" />
+                          </div>
+                          <span className="text-sm text-muted-foreground">View on Explorer</span>
+                          <ExternalLink className="w-4 h-4 ml-auto" />
+                        </a>
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer">
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <RefreshCw className="w-4 h-4" />
+                          </div>
+                          <span className="text-sm text-muted-foreground">Refresh Metadata</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Royalties */}
+                    {(metadata?.royalties || metadata?.creator) && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3">Royalties <Badge variant="secondary" className="text-xs">10%</Badge></h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Split royalties are automatically deposited into the creator&apos;s wallet
+                        </p>
+                        {metadata?.creator && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                              <span className="text-xs">👤</span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">Creator</div>
+                            </div>
+                            <div className="text-sm font-medium">100%</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'properties' && (
                   <div>
-                    <h3 className="text-lg font-semibold mb-4">Description</h3>
-                    <p className="text-muted-foreground leading-relaxed text-sm">
-                      {metadata.description}
-                    </p>
+                    <h3 className="text-lg font-semibold mb-6">Properties</h3>
+                    {metadata?.attributes && Array.isArray(metadata.attributes) && metadata.attributes.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {metadata.attributes.map((attr, index) => (
+                          <div key={index} className="bg-muted/30 rounded-lg p-4 border border-border">
+                            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                              {attr.trait_type}
+                            </div>
+                            <div className="text-sm font-medium">
+                              {String(attr.value)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p>No properties available for this NFT</p>
+                      </div>
+                    )}
+
+                    {/* Additional metadata properties */}
+                    {metadata?.properties && typeof metadata.properties === 'object' && Object.keys(metadata.properties).length > 0 && (
+                      <div className="mt-8">
+                        <h4 className="text-md font-semibold mb-4">Additional Properties</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          {Object.entries(metadata.properties).map(([key, value]) => (
+                            <div key={key} className="bg-muted/20 rounded-lg p-4 border border-border/50">
+                              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                                {key.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-sm font-medium">
+                                {String(value)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Details Section */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-6">Details</h3>
-                  <div className="space-y-4">
-                    <a
-                      href={`https://explorer.hiro.so/txid/${address}.${contractName}?chain=testnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <Eye className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">View on Explorer</span>
-                      <ExternalLink className="w-4 h-4 ml-auto" />
-                    </a>
-                    <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <RefreshCw className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">Refresh Metadata</span>
+                {activeTab === 'bids' && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-6">Bids</h3>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No bids yet</p>
+                      <p className="text-xs mt-2">Be the first to make an offer!</p>
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Royalties */}
-                {(metadata?.royalties || metadata?.creator) && (
+                {activeTab === 'activity' && (
                   <div>
-                    <h3 className="text-lg font-semibold mb-3">Royalties <Badge variant="secondary" className="text-xs">10%</Badge></h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Split royalties are automatically deposited into the creator&apos;s wallet
-                    </p>
-                    {metadata?.creator && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                          <span className="text-xs">👤</span>
+                    <h3 className="text-lg font-semibold mb-6">Activity</h3>
+                    <div className="space-y-4">
+                      {/* Contract Deployed Activity - Using timestamp from contract name */}
+                      {(() => {
+                        // Extract timestamp from contract name (format: contractName-TIMESTAMP)
+                        const contractNameParts = contractName.split('-');
+                        const timestampStr = contractNameParts[contractNameParts.length - 1];
+                        
+                        // Check if the last part is a valid timestamp
+                        const timestamp = parseInt(timestampStr);
+                        const isValidTimestamp = !isNaN(timestamp) && timestamp > 1000000000000; // Valid Unix timestamp in milliseconds
+                        
+                        if (isValidTimestamp) {
+                          const mintDate = new Date(timestamp);
+                          const now = new Date();
+                          const diffTime = Math.abs(now.getTime() - mintDate.getTime());
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          
+                          let relativeTime;
+                          if (diffDays === 1) {
+                            relativeTime = '1 day ago';
+                          } else if (diffDays < 7) {
+                            relativeTime = `${diffDays} days ago`;
+                          } else if (diffDays < 30) {
+                            const weeks = Math.floor(diffDays / 7);
+                            relativeTime = weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+                          } else if (diffDays < 365) {
+                            const months = Math.floor(diffDays / 30);
+                            relativeTime = months === 1 ? '1 month ago' : `${months} months ago`;
+                          } else {
+                            const years = Math.floor(diffDays / 365);
+                            relativeTime = years === 1 ? '1 year ago' : `${years} years ago`;
+                          }
+                          
+                          return (
+                            <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/20 border border-border/50">
+                              <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium">Contract Deployed & NFT Minted</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      by{' '}
+                                      <Link href={`/${deployerAddress || address}`} className="font-mono hover:text-foreground transition-colors">
+                                        {(deployerAddress || address)?.slice(0, 6)}...{(deployerAddress || address)?.slice(-4)}
+                                      </Link>
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Contract: {contractName}
+                                      {contractTxData && (
+                                        <span> • Block #{contractTxData.block_height}</span>
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-xs text-muted-foreground">
+                                      {mintDate.toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                      })}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {mintDate.toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  {relativeTime}
+                                </div>
+                                {contractTxData && (
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <a
+                                      href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet'}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      View Transaction
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        return null;
+                      })()}
+
+                      {/* Fallback to blockchain data if contract name doesn't contain timestamp */}
+                      {(() => {
+                        const contractNameParts = contractName.split('-');
+                        const timestampStr = contractNameParts[contractNameParts.length - 1];
+                        const timestamp = parseInt(timestampStr);
+                        const isValidTimestamp = !isNaN(timestamp) && timestamp > 1000000000000;
+                        
+                        if (!isValidTimestamp && contractTxData) {
+                          return (
+                            <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/20 border border-border/50">
+                              <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium">Contract Deployed & NFT Minted</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      by{' '}
+                                      <Link href={`/${deployerAddress || address}`} className="font-mono hover:text-foreground transition-colors">
+                                        {(deployerAddress || address)?.slice(0, 6)}...{(deployerAddress || address)?.slice(-4)}
+                                      </Link>
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Block #{contractTxData.block_height} • Status: {contractTxData.tx_status}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(contractTxData.burn_block_time_iso).toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                      })}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(contractTxData.burn_block_time_iso).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  {(() => {
+                                    const mintDate = new Date(contractTxData.burn_block_time_iso);
+                                    const now = new Date();
+                                    const diffTime = Math.abs(now.getTime() - mintDate.getTime());
+                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                    
+                                    if (diffDays === 1) {
+                                      return '1 day ago';
+                                    } else if (diffDays < 7) {
+                                      return `${diffDays} days ago`;
+                                    } else if (diffDays < 30) {
+                                      const weeks = Math.floor(diffDays / 7);
+                                      return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+                                    } else if (diffDays < 365) {
+                                      const months = Math.floor(diffDays / 30);
+                                      return months === 1 ? '1 month ago' : `${months} months ago`;
+                                    } else {
+                                      const years = Math.floor(diffDays / 365);
+                                      return years === 1 ? '1 year ago' : `${years} years ago`;
+                                    }
+                                  })()}
+                                </div>
+                                <div className="mt-3 flex items-center gap-2">
+                                  <a
+                                    href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet'}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    View Transaction
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        return null;
+                      })()}
+
+                      {/* Metadata Creation Activity (if different and available) */}
+                      {metadata?.created_at && (
+                        <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/10 border border-border/30">
+                          <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">Metadata Created</p>
+                                <p className="text-xs text-muted-foreground">NFT metadata uploaded to IPFS</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(metadata.created_at).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(metadata.created_at).toLocaleTimeString('en-US', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">Creator</div>
-                        </div>
-                        <div className="text-sm font-medium">100%</div>
-                      </div>
-                    )}
+                      )}
+
+                      {/* No activity data available fallback */}
+                      {(() => {
+                        const contractNameParts = contractName.split('-');
+                        const timestampStr = contractNameParts[contractNameParts.length - 1];
+                        const timestamp = parseInt(timestampStr);
+                        const isValidTimestamp = !isNaN(timestamp) && timestamp > 1000000000000;
+                        
+                        if (!isValidTimestamp && !contractTxData) {
+                          return (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <p>No activity data available</p>
+                              <p className="text-xs mt-2">Unable to determine minting timestamp from contract name or blockchain data</p>
+                            </div>
+                          );
+                        }
+                        
+                        return null;
+                      })()}
+                    </div>
                   </div>
                 )}
               </div>
@@ -634,16 +1020,28 @@ export default function NFTDetailPage() {
             <div className="sticky top-6 space-y-6">
               {/* Title & Creator */}
               <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h1 className="title text-3xl my-6">{metadata?.name || `Token #${tokenId}`}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="title text-3xl mt-6">{metadata?.name || `Token #${tokenId}`}</h1>
                     {metadata?.attributes && Array.isArray(metadata.attributes) && metadata.attributes.find(attr => attr.trait_type === 'Rarity') && (
                       <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30 ml-2">
                         {metadata.attributes.find(attr => attr.trait_type === 'Rarity')?.value || 'Epic'}
                       </Badge>
                     )}
                   </div>
+                  {/* Artist */}
+                  {metadata?.attributes && Array.isArray(metadata.attributes) && (() => {
+                    const artistAttribute = metadata.attributes.find(attr => attr.trait_type === 'Artist');
+                    if (artistAttribute) {
+                      return (
+                        <p className="text-lg text-muted-foreground mb-4">
+                          {artistAttribute.value}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   {/* Creator & Owner Info */}
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div>
@@ -713,84 +1111,19 @@ export default function NFTDetailPage() {
               {/* Price & Purchase Section */}
               <Card>
                 <CardContent className="px-6">
-                  <div className="space-y-2">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Price</div>
-                      {priceLoading ? (
-                        <div className="animate-pulse">
-                          <div className="h-8 bg-muted rounded w-32 mb-2"></div>
-                          <div className="h-4 bg-muted rounded w-24"></div>
-                        </div>
-                      ) : priceData ? (
-                        <>
-                          <div className="text-2xl font-bold">
-                            {priceData.nftPriceSatoshis.toLocaleString()} 丰
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="text-2xl font-bold">Price Unavailable</div>
-                          <div className="text-sm text-muted-foreground">Unable to fetch current price</div>
-                        </>
-                      )}
-                    </div>
-                    <div className="space-y-2">
+                  <div className="space-y-0">
+                    <div className="space-y-0">
                       <Button
                         className="w-full py-6 bg-accent-foreground hover:bg-accent-foreground cursor-pointer"
                         disabled={!priceData}
                       >
-                        {priceData ? `Buy now` : 'Loading price...'}
+                        {priceData ? `Mint` : 'Loading price...'}
                       </Button>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Contract Info */}
-              <Card>
-                <CardContent className="e-6">
-                  <div className="space-y-3">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Contract</div>
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm font-mono bg-muted px-2 py-1 rounded truncate">
-                          {address}.{contractName}
-                        </code>
-                        <Button
-                          onClick={() => copyToClipboard(`${address}.${contractName}`, 'Contract')}
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 cursor-pointer"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {owner && (
-                      <div>
-                        <div className="text-sm text-muted-foreground">Owner</div>
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/${owner}`}
-                            className="text-sm font-mono bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors truncate"
-                          >
-                            {owner.slice(0, 8)}...{owner.slice(-8)}
-                          </Link>
-                          <Button
-                            onClick={() => copyToClipboard(owner, 'Owner address')}
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 cursor-pointer"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
         </div>
@@ -799,7 +1132,7 @@ export default function NFTDetailPage() {
         <div className="mt-16">
           <h2 className="text-2xl font-bold mb-6">More from this creator</h2>
           {creatorNfts.length === 0 ? (
-            <div className="text-gray-400">No other models from this creator.</div>
+            <div className="text-gray-400">No other songs from this creator.</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {creatorNfts.map((nft) => (

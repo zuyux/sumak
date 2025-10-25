@@ -30,6 +30,30 @@ export default function PersistentPlayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
 
+  // Helper functions to extract metadata from new structure
+  const getAttributeValue = (metadata: unknown, traitType: string): string => {
+    const metadataObj = metadata as { attributes?: Array<{ trait_type: string; value: string | number }> };
+    const attribute = metadataObj?.attributes?.find((attr) => attr.trait_type === traitType);
+    return attribute?.value?.toString() || '';
+  };
+
+  const getTitle = (metadata: unknown): string => {
+    const metadataObj = metadata as { properties?: { title?: string }; name?: string };
+    return metadataObj?.properties?.title || metadataObj?.name || 'Unknown Title';
+  };
+
+  const getArtist = (metadata: unknown): string => {
+    return getAttributeValue(metadata, 'Artist') || 'Unknown Artist';
+  };
+
+  const getGenre = (metadata: unknown): string => {
+    return getAttributeValue(metadata, 'genre') || 'Unknown Genre';
+  };
+
+  const getYear = (metadata: unknown): string => {
+    return getAttributeValue(metadata, 'year') || '';
+  };
+
   // Sync local volume with global volume
   useEffect(() => {
     setLocalVolume(volume);
@@ -101,18 +125,17 @@ export default function PersistentPlayer() {
     const newTime = (clickX / rect.width) * duration;
     seekTo(newTime);
   };
-
-  // Handle canvas click
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newTime = (clickX / rect.width) * duration;
-    seekTo(newTime);
-  };
-
   // Handle volume change
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
+    console.log('Volume change triggered:', { newVolume, currentVolume: volume, localVolume });
+    
+    // Ensure the volume is valid
+    if (isNaN(newVolume) || newVolume < 0 || newVolume > 1) {
+      console.warn('Invalid volume value:', newVolume);
+      return;
+    }
+    
     setLocalVolume(newVolume); // Immediate UI feedback
     setVolume(newVolume); // Update global state
   };
@@ -132,17 +155,17 @@ export default function PersistentPlayer() {
             <div className="w-14 h-14 relative rounded overflow-hidden flex-shrink-0">
               <Image
                 src={currentAlbum.metadata.image}
-                alt={currentAlbum.metadata.properties.title}
+                alt={getTitle(currentAlbum.metadata)}
                 fill
                 className="object-cover"
               />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">
-                {currentAlbum.metadata.properties.title}
+                {getTitle(currentAlbum.metadata)}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                {currentAlbum.metadata.properties.artist}
+                {getArtist(currentAlbum.metadata)}
               </p>
             </div>
           </div>
@@ -194,7 +217,7 @@ export default function PersistentPlayer() {
           {/* Right section - Volume and expand (1/3 width) */}
           <div className="flex items-center justify-end space-x-3">
             <div className="flex items-center space-x-2">
-              <Volume2 size={16} className="text-muted-foreground" />
+              <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
               <input
                 type="range"
                 min="0"
@@ -202,7 +225,7 @@ export default function PersistentPlayer() {
                 step="0.01"
                 value={localVolume}
                 onChange={handleVolumeChange}
-                className="w-20 h-1 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
               />
             </div>
             <button
@@ -234,36 +257,21 @@ export default function PersistentPlayer() {
             <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
               <Image
                 src={currentAlbum.metadata.image}
-                alt={currentAlbum.metadata.properties.title}
+                alt={getTitle(currentAlbum.metadata)}
                 fill
                 className="object-cover"
               />
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="text-lg font-medium text-foreground truncate">
-                {currentAlbum.metadata.properties.title}
+                {getTitle(currentAlbum.metadata)}
               </h4>
               <p className="text-muted-foreground truncate">
-                {currentAlbum.metadata.properties.artist}
+                {getArtist(currentAlbum.metadata)}
               </p>
               <p className="text-sm text-muted-foreground">
-                {currentAlbum.metadata.properties.genre} • {currentAlbum.metadata.properties.year}
+                {getGenre(currentAlbum.metadata)}{getYear(currentAlbum.metadata) && ` • ${getYear(currentAlbum.metadata)}`}
               </p>
-            </div>
-          </div>
-
-          {/* Visualizer */}
-          <div className="space-y-2">
-            <canvas
-              ref={canvasRef}
-              width={800}
-              height={60}
-              className="w-full h-15 bg-transparent cursor-pointer"
-              onClick={handleCanvasClick}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
             </div>
           </div>
 
@@ -315,7 +323,7 @@ export default function PersistentPlayer() {
 
             {/* Right - Volume */}
             <div className="flex items-center justify-end space-x-2">
-              <Volume2 size={16} className="text-muted-foreground" />
+              <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
               <input
                 type="range"
                 min="0"
@@ -352,7 +360,7 @@ export default function PersistentPlayer() {
                         <div className="w-10 h-10 relative rounded overflow-hidden flex-shrink-0">
                           <Image
                             src={album.metadata.image}
-                            alt={album.metadata.properties.title}
+                            alt={getTitle(album.metadata)}
                             fill
                             className="object-cover"
                           />
@@ -360,10 +368,10 @@ export default function PersistentPlayer() {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {album.metadata?.properties.title || album.metadata?.name || 'Loading...'}
+                          {getTitle(album.metadata) || 'Loading...'}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {album.metadata?.properties.artist || 'Unknown Artist'}
+                          {getArtist(album.metadata)}
                         </p>
                       </div>
                       <div className="text-xs text-muted-foreground flex-shrink-0">
