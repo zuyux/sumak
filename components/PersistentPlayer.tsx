@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMusicPlayer } from './MusicPlayerContext';
 
 export default function PersistentPlayer() {
+  const router = useRouter();
   const {
     currentAlbum,
     isPlaying,
@@ -23,6 +25,7 @@ export default function PersistentPlayer() {
     setIsShuffled,
     setIsRepeating,
     setCurrentAlbum,
+    navigateToCurrentNFT,
   } = useMusicPlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -149,9 +152,13 @@ export default function PersistentPlayer() {
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border">
       {/* Collapsed view - Grid layout similar to Spotify */}
       {!isExpanded && (
-        <div className="grid grid-cols-3 items-center p-4 h-20 gap-4">
+        <div className="grid grid-cols-3 items-center px-4 py-2 h-20 gap-4">
           {/* Left section - Song info (1/3 width) */}
-          <div className="flex items-center space-x-3 min-w-0">
+          <div 
+            className="flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-2 rounded-lg transition-colors"
+            onClick={navigateToCurrentNFT}
+            title="View NFT details"
+          >
             <div className="w-14 h-14 relative rounded overflow-hidden flex-shrink-0">
               <Image
                 src={currentAlbum.metadata.image}
@@ -253,7 +260,11 @@ export default function PersistentPlayer() {
           </div>
 
           {/* Song info */}
-          <div className="flex items-center space-x-4">
+          <div 
+            className="flex items-center space-x-4 cursor-pointer hover:bg-muted/20 p-3 rounded-lg transition-colors"
+            onClick={navigateToCurrentNFT}
+            title="View NFT details"
+          >
             <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
               <Image
                 src={currentAlbum.metadata.image}
@@ -346,39 +357,51 @@ export default function PersistentPlayer() {
               <h4 className="text-lg font-semibold mb-4">Queue</h4>
               <div className="max-h-64 overflow-y-auto space-y-2">
                 {albumsWithMetadata.map((album) => (
-                  <button
-                    key={album.id}
-                    onClick={() => setCurrentAlbum(album)}
-                    className={`w-full p-3 rounded-lg transition-colors text-left hover:bg-muted/50 cursor-pointer ${
-                      currentAlbum?.id === album.id
-                        ? 'bg-primary/20 border border-primary/40'
-                        : 'bg-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      {album.metadata && (
-                        <div className="w-10 h-10 relative rounded overflow-hidden flex-shrink-0">
-                          <Image
-                            src={album.metadata.image}
-                            alt={getTitle(album.metadata)}
-                            fill
-                            className="object-cover"
-                          />
+                  <div key={album.id} className="flex">
+                    <button
+                      onClick={() => setCurrentAlbum(album)}
+                      className={`flex-1 p-3 rounded-l-lg transition-colors text-left hover:bg-muted/50 cursor-pointer ${
+                        currentAlbum?.id === album.id
+                          ? 'bg-primary/20 border border-primary/40 border-r-0'
+                          : 'bg-transparent border border-transparent border-r-0'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        {album.metadata && (
+                          <div className="w-10 h-10 relative rounded overflow-hidden flex-shrink-0">
+                            <Image
+                              src={album.metadata.image}
+                              alt={getTitle(album.metadata)}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {getTitle(album.metadata) || 'Loading...'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {getArtist(album.metadata)}
+                          </p>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {getTitle(album.metadata) || 'Loading...'}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {getArtist(album.metadata)}
-                        </p>
+                        <div className="text-xs text-muted-foreground flex-shrink-0">
+                          {album.metadata && formatTime(album.metadata.properties.duration)}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground flex-shrink-0">
-                        {album.metadata && formatTime(album.metadata.properties.duration)}
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={() => album.nftUrl && router.push(album.nftUrl)}
+                      className={`p-3 rounded-r-lg transition-colors hover:bg-muted/50 cursor-pointer flex items-center ${
+                        currentAlbum?.id === album.id
+                          ? 'bg-primary/20 border border-primary/40 border-l-0'
+                          : 'bg-transparent border border-transparent border-l-0'
+                      }`}
+                      title="View NFT details"
+                    >
+                      <ChevronUp className="w-4 h-4 transform rotate-45" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>

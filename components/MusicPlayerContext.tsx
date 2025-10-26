@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface NFTMetadata {
   name: string;
@@ -35,6 +36,7 @@ interface NFTMetadata {
 interface Album {
   id: string;
   metadataUrl: string;
+  nftUrl?: string;
   metadata?: NFTMetadata;
 }
 
@@ -60,6 +62,10 @@ interface MusicPlayerContextType {
   setIsShuffled: (shuffled: boolean) => void;
   setIsRepeating: (repeating: boolean) => void;
   seekTo: (time: number) => void;
+  navigateToCurrentNFT: () => void;
+  
+  // Helper functions
+  createNFTUrl: (contractAddress: string, contractName: string, tokenId: number) => string;
 }
 
 const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
@@ -68,23 +74,28 @@ const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 const albums: Album[] = [
   {
     id: '1',
-    metadataUrl: 'https://ipfs.io/ipfs/QmQx3XDVeWtXsnoWavLwKfh822mFCLWoQ8FFcrG4cwB6yg'
+    metadataUrl: 'https://ipfs.io/ipfs/QmQx3XDVeWtXsnoWavLwKfh822mFCLWoQ8FFcrG4cwB6yg',
+    nftUrl: '/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ/cholo-1761380645632/1'
   },
   {
-    id: '2', 
-    metadataUrl: 'https://ipfs.io/ipfs/QmeZ329grqNRx8dDVMyDvtr1afkDHFfPotaSy2fwQrwbWF'
+    id: '2',
+    metadataUrl: 'https://ipfs.io/ipfs/QmeZ329grqNRx8dDVMyDvtr1afkDHFfPotaSy2fwQrwbWF',
+    nftUrl: '/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ/shakedown-1761419817658/1'    
   },
   {
     id: '3',
-    metadataUrl: 'https://ipfs.io/ipfs/QmPM6aCi9gLaF4rWKcMrtYrXSbS2dJrEUsvpZ6b72mLFvo'
+    metadataUrl: 'https://ipfs.io/ipfs/QmPM6aCi9gLaF4rWKcMrtYrXSbS2dJrEUsvpZ6b72mLFvo',
+    nftUrl: '/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ/cool-cat-queen-1761422931492/1'
   },
   {
     id: '4',
-    metadataUrl: 'https://ipfs.io/ipfs/QmeZ329grqNRx8dDVMyDvtr1afkDHFfPotaSy2fwQrwbWF'
+    metadataUrl: 'https://ipfs.io/ipfs/QmayE1pGpMD57Wcx9WsMnKvJtP4JhHATFuBGQDcz9aCBN5',
+    nftUrl: '/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ/hydrogen-1761448324287/1'
   }
 ];
 
 export function MusicPlayerProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [currentAlbum, setCurrentAlbumState] = useState<Album | null>(albums[0]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -367,6 +378,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Navigation function to go to the current NFT page
+  const navigateToCurrentNFT = useCallback(() => {
+    if (currentAlbum?.nftUrl) {
+      router.push(currentAlbum.nftUrl);
+    }
+  }, [currentAlbum?.nftUrl, router]);
+
+  // Helper function to create NFT URLs
+  const createNFTUrl = useCallback((contractAddress: string, contractName: string, tokenId: number) => {
+    return `/${contractAddress}/${contractName}/${tokenId}`;
+  }, []);
+
   // Audio event listeners
   useEffect(() => {
     const audio = audioRef.current;
@@ -470,6 +493,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setIsShuffled,
     setIsRepeating,
     seekTo,
+    navigateToCurrentNFT,
+    createNFTUrl,
   };
 
   return (
