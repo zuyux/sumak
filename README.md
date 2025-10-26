@@ -85,7 +85,7 @@ SUMAK revolutionizes music ownership by storing metadata and rights on-chain whi
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/zuyux/rimay.git
+git clone https://github.com/zuyux/sumak.git
 cd sumak
 ```
 
@@ -237,7 +237,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Links
 
 - **Website**: [sumak.app](https://sumak.app)
-- **GitHub**: [zuyux/rimay](https://github.com/zuyux/rimay)
+- **GitHub**: [zuyux/sumak](https://github.com/zuyux/sumak)
 - **Documentation**: Coming soon
 - **Discord**: Join our community (link coming soon)
 
