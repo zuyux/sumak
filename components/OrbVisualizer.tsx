@@ -6,6 +6,7 @@ import * as THREE from 'three';
 
 const OrbVisualizer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const circularCanvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -16,6 +17,7 @@ const OrbVisualizer: React.FC = () => {
   const animationIdRef = useRef<number | null>(null);
   const frequencyDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const clockRef = useRef<THREE.Clock | null>(null);
+  const floatingParticlesRef = useRef<HTMLDivElement>(null);
   
   const { audioRef, isPlaying, currentAlbum } = useMusicPlayer();
   
@@ -26,8 +28,207 @@ const OrbVisualizer: React.FC = () => {
     rotationSpeed: 5.0,
     resolution: 69,
     distortion: 3.3,
-    reactivity: 2.0
+    reactivity: 2.0,
+    sensitivity: 5.0
   }), []);
+
+  // Initialize floating particles
+  useEffect(() => {
+    if (!floatingParticlesRef.current) return;
+
+    const container = floatingParticlesRef.current;
+    const numParticles = 1000;
+    
+    // Clear any existing particles
+    container.innerHTML = '';
+    
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const centerX = windowWidth / 2;
+    const centerY = windowHeight / 2;
+
+    const particles: Array<{
+      element: HTMLDivElement;
+      x: number;
+      y: number;
+      speed: number;
+      angle: number;
+      angleSpeed: number;
+      amplitude: number;
+      size: number;
+      pulseSpeed: number;
+      pulsePhase: number;
+    }> = [];
+
+    for (let i = 0; i < numParticles; i++) {
+      const particle = document.createElement('div');
+      particle.style.position = 'absolute';
+      particle.style.width = '1.5px';
+      particle.style.height = '1.5px';
+      particle.style.backgroundColor = `rgba(255, ${Math.floor(Math.random() * 100) + 78}, ${Math.floor(Math.random() * 100) + 66}, ${Math.random() * 0.5 + 0.2})`;
+      particle.style.borderRadius = '50%';
+      particle.style.pointerEvents = 'none';
+
+      // Create hollow area in center
+      const minDistance = 200;
+      const maxDistance = Math.max(windowWidth, windowHeight) * 0.8;
+      const angle = Math.random() * Math.PI * 2;
+      const distanceFactor = Math.sqrt(Math.random());
+      const distance = minDistance + distanceFactor * (maxDistance - minDistance);
+
+      const x = Math.cos(angle) * distance + centerX;
+      const y = Math.sin(angle) * distance + centerY;
+
+      particle.style.left = x + 'px';
+      particle.style.top = y + 'px';
+
+      const particleObj = {
+        element: particle,
+        x: x,
+        y: y,
+        speed: Math.random() * 0.5 + 0.1,
+        angle: Math.random() * Math.PI * 2,
+        angleSpeed: (Math.random() - 0.5) * 0.02,
+        amplitude: Math.random() * 50 + 20,
+        size: 1.5,
+        pulseSpeed: Math.random() * 0.04 + 0.01,
+        pulsePhase: Math.random() * Math.PI * 2
+      };
+
+      particles.push(particleObj);
+      container.appendChild(particle);
+    }
+
+    // Animate particles
+    let time = 0;
+    const animateParticles = () => {
+      time += 0.01;
+
+      particles.forEach((particle) => {
+        particle.angle += particle.angleSpeed;
+
+        const orbitX = centerX + Math.cos(particle.angle) * particle.amplitude;
+        const orbitY = centerY + Math.sin(particle.angle) * particle.amplitude;
+
+        const noiseX = Math.sin(time * particle.speed + particle.angle) * 5;
+        const noiseY = Math.cos(time * particle.speed + particle.angle * 0.7) * 5;
+
+        const newX = orbitX + noiseX;
+        const newY = orbitY + noiseY;
+
+        particle.element.style.left = newX + 'px';
+        particle.element.style.top = newY + 'px';
+
+        const pulseFactor = 1 + Math.sin(time * particle.pulseSpeed + particle.pulsePhase) * 0.3;
+        const newSize = particle.size * pulseFactor;
+
+        particle.element.style.width = newSize + 'px';
+        particle.element.style.height = newSize + 'px';
+
+        const baseOpacity = 0.2 + Math.sin(time * particle.pulseSpeed + particle.pulsePhase) * 0.1;
+        particle.element.style.opacity = Math.min(0.8, baseOpacity).toString();
+      });
+
+      requestAnimationFrame(animateParticles);
+    };
+
+    animateParticles();
+  }, []);
+
+  // Initialize circular visualizer
+  useEffect(() => {
+    if (!circularCanvasRef.current) return;
+
+    const canvas = circularCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resizeCanvas = () => {
+      canvas.width = 450;
+      canvas.height = 450;
+    };
+    resizeCanvas();
+
+    const drawCircularVisualizer = () => {
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      ctx.clearRect(0, 0, width, height);
+
+      if (analyserRef.current && frequencyDataRef.current) {
+        analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
+        
+        const numPoints = 180;
+        const baseRadius = Math.min(width, height) * 0.4;
+        
+        // Draw base circle
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, baseRadius * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 78, 66, 0.05)';
+        ctx.fill();
+
+        const numRings = 3;
+        for (let ring = 0; ring < numRings; ring++) {
+          const ringRadius = baseRadius * (0.7 + ring * 0.15);
+          const opacity = 0.8 - ring * 0.2;
+          
+          ctx.beginPath();
+          for (let i = 0; i < numPoints; i++) {
+            const freqRangeStart = Math.floor((ring * frequencyDataRef.current.length) / (numRings * 1.5));
+            const freqRangeEnd = Math.floor(((ring + 1) * frequencyDataRef.current.length) / (numRings * 1.5));
+            const freqRange = freqRangeEnd - freqRangeStart;
+            
+            let sum = 0;
+            const segmentSize = Math.floor(freqRange / numPoints);
+            for (let j = 0; j < segmentSize; j++) {
+              const freqIndex = freqRangeStart + ((i * segmentSize + j) % freqRange);
+              sum += frequencyDataRef.current[freqIndex];
+            }
+            
+            const value = sum / (segmentSize * 255);
+            const adjustedValue = value * (settings.sensitivity / 5) * settings.reactivity;
+            const dynamicRadius = ringRadius * (1 + adjustedValue * 0.5);
+            
+            const angle = (i / numPoints) * Math.PI * 2;
+            const x = centerX + Math.cos(angle) * dynamicRadius;
+            const y = centerY + Math.sin(angle) * dynamicRadius;
+            
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.closePath();
+          
+          const gradient = ctx.createRadialGradient(centerX, centerY, ringRadius * 0.8, centerX, centerY, ringRadius * 1.2);
+          if (ring === 0) {
+            gradient.addColorStop(0, `rgba(255, 78, 66, ${opacity})`);
+            gradient.addColorStop(1, `rgba(194, 54, 47, ${opacity * 0.7})`);
+          } else if (ring === 1) {
+            gradient.addColorStop(0, `rgba(194, 54, 47, ${opacity})`);
+            gradient.addColorStop(1, `rgba(255, 179, 171, ${opacity * 0.7})`);
+          } else {
+            gradient.addColorStop(0, `rgba(255, 179, 171, ${opacity})`);
+            gradient.addColorStop(1, `rgba(255, 78, 66, ${opacity * 0.7})`);
+          }
+          
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = 2 + (numRings - ring);
+          ctx.stroke();
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = 'rgba(255, 78, 66, 0.7)';
+        }
+        ctx.shadowBlur = 0;
+      }
+      
+      requestAnimationFrame(drawCircularVisualizer);
+    };
+
+    drawCircularVisualizer();
+  }, [settings.sensitivity, settings.reactivity]);
 
   useEffect(() => {
     // Copy containerRef.current early to avoid stale closure
@@ -42,10 +243,15 @@ const OrbVisualizer: React.FC = () => {
         scene.fog = new THREE.FogExp2(0x0a0e17, 0.05);
         sceneRef.current = scene;
 
-        // Camera setup
+        // Get actual container dimensions to avoid cropping
+        const containerRect = container.getBoundingClientRect();
+        const width = Math.max(containerRect.width || window.innerWidth, window.innerWidth);
+        const height = Math.max(containerRect.height || window.innerHeight, window.innerHeight);
+
+        // Camera setup  
         const camera = new THREE.PerspectiveCamera(
           60,
-          window.innerWidth / window.innerHeight,
+          width / height,
           0.1,
           1000
         );
@@ -60,9 +266,15 @@ const OrbVisualizer: React.FC = () => {
           stencil: false,
           depth: true
         });
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        renderer.setSize(width, height);
         renderer.setClearColor(0x000000, 0);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio to avoid performance issues
+        renderer.domElement.style.position = 'absolute';
+        renderer.domElement.style.top = '0';
+        renderer.domElement.style.left = '0';
+        renderer.domElement.style.width = '100%';
+        renderer.domElement.style.height = '100%';
         rendererRef.current = renderer;
 
         container.appendChild(renderer.domElement);
@@ -70,7 +282,7 @@ const OrbVisualizer: React.FC = () => {
         // Clock for timing
         clockRef.current = new THREE.Clock();
 
-        // Lighting
+        // Lighting setup identical to reference
         const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
         scene.add(ambientLight);
 
@@ -86,10 +298,10 @@ const OrbVisualizer: React.FC = () => {
         pointLight2.position.set(-2, -2, -2);
         scene.add(pointLight2);
 
-        // Create anomaly object (orb)
+        // Create anomaly object (orb) - exactly matching reference
         createAnomalyObject(scene);
 
-        // Create background particles
+        // Create background particles identical to reference
         createBackgroundParticles(scene);
 
         setIsInitialized(true);
@@ -106,13 +318,13 @@ const OrbVisualizer: React.FC = () => {
       const anomalyObject = new THREE.Group();
       const radius = 2;
 
-      // Outer geometry with high resolution as specified
+      // Outer geometry with exact resolution calculation from reference
       const outerGeometry = new THREE.IcosahedronGeometry(
         radius,
         Math.max(1, Math.floor(settings.resolution / 8))
       );
 
-      // Main orb material with audio-reactive distortion
+      // Main orb material - exact copy from reference with our settings
       const outerMaterial = new THREE.ShaderMaterial({
         uniforms: {
           time: { value: 0 },
@@ -233,7 +445,7 @@ const OrbVisualizer: React.FC = () => {
       const outerSphere = new THREE.Mesh(outerGeometry, outerMaterial);
       anomalyObject.add(outerSphere);
 
-      // Glow sphere
+      // Glow sphere - exact copy from reference
       const glowGeometry = new THREE.SphereGeometry(radius * 1.2, 32, 32);
       const glowMaterial = new THREE.ShaderMaterial({
         uniforms: {
@@ -378,17 +590,18 @@ const OrbVisualizer: React.FC = () => {
       const time = clockRef.current?.getElapsedTime() || 0;
       let audioLevel = 0;
 
-      // Get audio data if available
+      // Get audio data if available - exact calculation from reference
       if (analyserRef.current && frequencyDataRef.current) {
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
         let sum = 0;
         for (let i = 0; i < frequencyDataRef.current.length; i++) {
           sum += frequencyDataRef.current[i];
         }
-        audioLevel = (sum / frequencyDataRef.current.length / 255) * settings.reactivity;
+        // Exact audio level calculation from reference
+        audioLevel = ((sum / frequencyDataRef.current.length / 255) * settings.sensitivity) / 5;
       }
 
-      // Update orb
+      // Update orb - exact rotation calculations from reference
       if (anomalyObjectRef.current) {
         const audioRotationFactor = 1 + audioLevel * settings.reactivity;
         anomalyObjectRef.current.rotation.y += 0.005 * settings.rotationSpeed * audioRotationFactor;
@@ -482,10 +695,20 @@ const OrbVisualizer: React.FC = () => {
   // Handle window resize
   useEffect(() => {
     const handleResize = () => {
-      if (rendererRef.current && cameraRef.current) {
-        cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+      if (rendererRef.current && cameraRef.current && containerRef.current) {
+        const container = containerRef.current;
+        const containerRect = container.getBoundingClientRect();
+        const width = Math.max(containerRect.width || window.innerWidth, window.innerWidth);
+        const height = Math.max(containerRect.height || window.innerHeight, window.innerHeight);
+        
+        cameraRef.current.aspect = width / height;
         cameraRef.current.updateProjectionMatrix();
-        rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+        rendererRef.current.setSize(width, height);
+        
+        // Ensure the canvas fills the container properly
+        const canvas = rendererRef.current.domElement;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
       }
     };
 
@@ -494,11 +717,91 @@ const OrbVisualizer: React.FC = () => {
   }, []);
 
   return (
-    <div 
-      ref={containerRef}
-      className="fixed inset-0 pointer-events-none"
-      style={{ zIndex: 1 }}
-    />
+    <>
+      {/* Three.js container */}
+      <div 
+        ref={containerRef}
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          margin: 0,
+          padding: 0,
+          overflow: 'hidden',
+          width: '100vw',
+          height: '100vh',
+          top: 0,
+          left: 0
+        }}
+      />
+
+      {/* Grid overlay */}
+      <div className="fixed inset-0 pointer-events-none z-20"
+           style={{
+             backgroundImage: `
+               linear-gradient(to right, rgba(255, 240, 230, 0.02) 1px, transparent 1px),
+               linear-gradient(to bottom, rgba(255, 240, 230, 0.02) 1px, transparent 1px)
+             `,
+             backgroundSize: '40px 40px'
+           }} />
+
+      {/* Circular visualizer */}
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] pointer-events-none z-30">
+        <canvas
+          ref={circularCanvasRef}
+          width={450}
+          height={450}
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Audio wave rings */}
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] pointer-events-none z-20">
+        <div className="w-full h-full rounded-full border border-red-400/10 relative">
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full h-full rounded-full border border-red-400/5 animate-pulse" 
+               style={{ 
+                 animation: 'pulse 4s infinite',
+                 animationDelay: '0s'
+               }} />
+        </div>
+      </div>
+
+      {/* Floating particles */}
+      <div 
+        ref={floatingParticlesRef}
+        className="fixed inset-0 pointer-events-none z-25"
+      />
+
+      {/* Scanner frame - the targeting UI */}
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-red-400 pointer-events-none z-40  opacity-5 ">
+        {/* Corner markers */}
+        <div className="absolute -top-0.5 -left-0.5 w-5 h-5 border-t-2 border-l-2 border-red-400 opacity-5" />
+        <div className="absolute -top-0.5 -right-0.5 w-5 h-5 border-t-2 border-r-2 border-red-400 opacity-5" />
+        <div className="absolute -bottom-0.5 -left-0.5 w-5 h-5 border-b-2 border-l-2 border-red-400 opacity-5" />
+        <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 border-b-2 border-r-2 border-red-400 opacity-5" />
+
+      </div>
+
+
+
+      <style jsx>{`
+        @keyframes pulse {
+          0% {
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+          }
+          50% {
+            width: 120%;
+            height: 120%;
+            opacity: 0;
+          }
+          100% {
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+          }
+        }
+      `}</style>
+    </>
   );
 };
 

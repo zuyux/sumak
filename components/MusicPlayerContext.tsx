@@ -200,28 +200,13 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         setCurrentAlbumState(firstAlbumWithMetadata);
         setDuration(firstAlbumWithMetadata.metadata.properties.duration);
         
-        // Preload the first album's image to improve LCP
-        if (firstAlbumWithMetadata.metadata.image) {
-          const imageUrl = convertToIpfsIo(firstAlbumWithMetadata.metadata.image);
-          
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.href = imageUrl;
-          link.as = 'image';
-          document.head.appendChild(link);
-          
-          // Clean up the preload link after a delay to avoid the warning
-          setTimeout(() => {
-            if (document.head.contains(link)) {
-              document.head.removeChild(link);
-            }
-          }, 10000);
-        }
+        // Note: Removed image preloading to prevent console warnings
+        // The images will load on-demand when the player is displayed
       }
     } finally {
       setIsLoading(false);
     }
-  }, [loadMetadata, convertToIpfsIo]);
+  }, [loadMetadata]);
 
   // Load metadata on component mount
   useEffect(() => {
@@ -285,12 +270,24 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [isPlaying, currentAlbum]);
 
-  const nextTrack = useCallback(() => {
+  const nextTrack = useCallback((autoPlay = false) => {
     if (!currentAlbum) return;
     
-    const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
-    const nextIndex = currentIndex < albumsWithMetadata.length - 1 ? currentIndex + 1 : 0;
-    const nextAlbum = albumsWithMetadata[nextIndex];
+    let nextAlbum: Album;
+    
+    if (isShuffled) {
+      // Get a random album that's not the current one
+      const availableAlbums = albumsWithMetadata.filter(album => album.id !== currentAlbum.id);
+      if (availableAlbums.length === 0) return;
+      
+      const randomIndex = Math.floor(Math.random() * availableAlbums.length);
+      nextAlbum = availableAlbums[randomIndex];
+    } else {
+      // Normal sequential playback
+      const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
+      const nextIndex = currentIndex < albumsWithMetadata.length - 1 ? currentIndex + 1 : 0;
+      nextAlbum = albumsWithMetadata[nextIndex];
+    }
     
     if (audioRef.current) {
       audioRef.current.pause();
@@ -300,19 +297,32 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setCurrentAlbum(nextAlbum);
     
-    if (nextAlbum.metadata && isPlaying) {
+    // Auto-play if requested (from auto-advance) or if currently playing
+    if ((autoPlay || isPlaying) && nextAlbum.metadata) {
       setTimeout(() => {
         audioRef.current?.play().catch(console.error);
       }, 100);
     }
-  }, [albumsWithMetadata, currentAlbum, isPlaying, setCurrentAlbum]);
+  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum]);
 
   const previousTrack = useCallback(() => {
     if (!currentAlbum) return;
     
-    const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
-    const previousIndex = currentIndex > 0 ? currentIndex - 1 : albumsWithMetadata.length - 1;
-    const previousAlbum = albumsWithMetadata[previousIndex];
+    let previousAlbum: Album;
+    
+    if (isShuffled) {
+      // Get a random album that's not the current one
+      const availableAlbums = albumsWithMetadata.filter(album => album.id !== currentAlbum.id);
+      if (availableAlbums.length === 0) return;
+      
+      const randomIndex = Math.floor(Math.random() * availableAlbums.length);
+      previousAlbum = availableAlbums[randomIndex];
+    } else {
+      // Normal sequential playback
+      const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
+      const previousIndex = currentIndex > 0 ? currentIndex - 1 : albumsWithMetadata.length - 1;
+      previousAlbum = albumsWithMetadata[previousIndex];
+    }
     
     if (audioRef.current) {
       audioRef.current.pause();
@@ -327,7 +337,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         audioRef.current?.play().catch(console.error);
       }, 100);
     }
-  }, [albumsWithMetadata, currentAlbum, isPlaying, setCurrentAlbum]);
+  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum]);
 
   const setVolume = useCallback((newVolume: number) => {
     console.log('setVolume called:', { newVolume, currentVolume: volume });
@@ -371,8 +381,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       // Don't force volume here - let the volume effect handle it
     };
     const handleEnded = () => {
-      setIsPlaying(false);
-      nextTrack();
+      if (isRepeating) {
+        // Repeat current song
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(console.error);
+        }
+        setCurrentTime(0);
+      } else {
+        // Auto-advance to next track and continue playing
+        nextTrack(true);
+      }
     };
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
@@ -392,7 +411,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
     };
-  }, [nextTrack, volume]);
+  }, [nextTrack, volume, isRepeating, isPlaying]);
 
   // Global keyboard shortcuts
   useEffect(() => {

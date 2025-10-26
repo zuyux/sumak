@@ -54,19 +54,31 @@ export default function NFTViewerPage() {
         if (contractResponse.ok) {
           const contractData = await contractResponse.json();
           if (contractData.success && contractData.metadataCid) {
-            // Fetch metadata from IPFS using the CID and gateway URL from contract response
-            const gatewayUrl = contractData.gatewayUrl || 'https://gateway.pinata.cloud';
-            const metadataUrl = `${gatewayUrl}/ipfs/${contractData.metadataCid}`;
+            // Use gateway.pinata.cloud directly (already configured in next.config.ts)
+            const metadataUrl = `https://gateway.pinata.cloud/ipfs/${contractData.metadataCid}`;
             
-            const response = await fetch(metadataUrl);
+            console.log(`Fetching metadata from: ${metadataUrl}`);
+            
+            const response = await fetch(metadataUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+              },
+            });
             
             if (response.ok) {
               const nftData: NFTMetadata = await response.json();
+              console.log('Successfully loaded metadata from gateway.pinata.cloud');
+              
               setMetadata(nftData);
               
               if (nftData.animation_url) {
                 setModelUrl(nftData.animation_url);
               }
+              return;
+            } else {
+              console.warn(`Failed to fetch metadata: ${response.status} ${response.statusText}`);
+              setError('Failed to load NFT metadata from IPFS gateway.');
               return;
             }
           }
@@ -259,9 +271,25 @@ export default function NFTViewerPage() {
                       lightIntensity={11}
                     />
                   </div>
+                ) : metadata.image ? (
+                  <div className="w-full h-full flex items-center justify-center relative">
+                    {/* Use regular img tag for IPFS URLs to avoid Next.js optimization issues */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={metadata.image}
+                      alt={metadata.name}
+                      className="w-full h-full object-contain"
+                      onError={() => {
+                        console.warn('Image failed to load:', metadata.image);
+                      }}
+                      onLoad={() => {
+                        console.log('Image loaded successfully:', metadata.image);
+                      }}
+                    />
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full bg-[#111] rounded-lg">
-                    <p className="text-gray-400">No 3D model available</p>
+                    <p className="text-gray-400">No media available</p>
                   </div>
                 )}
               </div>

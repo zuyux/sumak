@@ -4,16 +4,19 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { fetchCallReadOnlyFunction, uintCV, cvToJSON } from '@stacks/transactions';
+import { fetchCallReadOnlyFunction, uintCV, cvToJSON, contractPrincipalCV } from '@stacks/transactions';
+import { request } from '@stacks/connect';
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 import axios from 'axios';
-import { ArrowLeft, ExternalLink, Share2, Heart, RefreshCw, Eye, MoreHorizontal, Play, Pause } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Share2, Heart, RefreshCw, Eye, MoreHorizontal, Play, Pause, ShoppingCart, Coins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
+import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 // import { getProfile } from '@/lib/profileApi';
-import { getNftsByCreator } from '@/lib/nftApi';
+// Temporarily removed import: import { getNftsByCreator } from '@/lib/nftApi';
 
 type TokenMetadata = {
   name?: string;
@@ -50,6 +53,15 @@ export default function NFTDetailPage() {
   const [deployerAddress, setDeployerAddress] = useState<string | null>(null);
   const params = useParams();
   const router = useRouter();
+  
+  // NFT Collection state
+  const [isListed, setIsListed] = useState<boolean>(false);
+  const [listingPrice, setListingPrice] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isCollecting, setIsCollecting] = useState<boolean>(false);
+  
+  // Get current user address
+  const currentUserAddress = useCurrentAddress();
 
   const address = params?.address as string;
   const contractName = params?.contractName as string;
@@ -101,12 +113,6 @@ export default function NFTDetailPage() {
   const [audioBlobUrl, setAudioBlobUrl] = useState<string>('');
   const audioCacheKey = `nft-audio-${address}-${contractName}-${tokenId}`;
   const audioBlobUrlRef = useRef<string | null>(null);
-  const [priceData, setPriceData] = useState<{
-    stxPriceUsd: number;
-    nftPriceSatoshis: number;
-    nftPriceStx: number;
-    nftPriceUsd: number;
-  } | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
   type CreatorProfile = {
     avatar_url?: string;
@@ -117,6 +123,93 @@ export default function NFTDetailPage() {
 
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
   const [creatorNfts, setCreatorNfts] = useState<TokenMetadata[]>([]);
+
+  // Contract interaction functions
+  const checkIfListed = useCallback(async () => {
+    if (!address || !contractName || !tokenId) return;
+    
+    try {
+      setIsLoading(true);
+      const network = process.env.NEXT_PUBLIC_STACKS_NETWORK === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
+      
+      const result = await fetchCallReadOnlyFunction({
+        contractAddress: address,
+        contractName: contractName,
+        functionName: 'get-listing-in-sat',
+        functionArgs: [uintCV(parseInt(tokenId))],
+        senderAddress: address,
+        network: network,
+      });
+      
+      const jsonResult = cvToJSON(result);
+      console.log('Listing check result:', jsonResult);
+      
+      if (jsonResult.success && jsonResult.value) {
+        setIsListed(true);
+        setListingPrice(parseInt(jsonResult.value.price?.value || '0'));
+      } else {
+        setIsListed(false);
+        setListingPrice(null);
+      }
+    } catch (error) {
+      console.error('Error checking listing:', error);
+      setIsListed(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address, contractName, tokenId]);
+
+  const collectNFT = useCallback(async () => {
+    if (!currentUserAddress || !address || !contractName || !tokenId || !listingPrice) {
+      toast('Please connect your wallet first');
+      return;
+    }
+
+    try {
+      setIsCollecting(true);
+      
+      // For this example, we'll use a simple commission trait contract
+      // In a real app, you'd want to use a proper marketplace commission contract
+      const commissionContract = `${process.env.NEXT_PUBLIC_COMMISSION_CONTRACT_ADDRESS || address}.commission-trait`;
+      
+      const functionArgs = [
+        uintCV(parseInt(tokenId)),
+        contractPrincipalCV(commissionContract.split('.')[0], commissionContract.split('.')[1])
+      ];
+
+      const contractId = `${address}.${contractName}` as const;
+      const txOptions = {
+        contract: contractId,
+        functionName: 'buy-in-sat',
+        functionArgs: functionArgs,
+        network: process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet',
+        postConditionMode: 'allow' as const,
+      };
+
+      console.log('Collecting NFT with options:', txOptions);
+      
+      const response = await request('stx_callContract', txOptions);
+      
+      if (response.txid) {
+        toast(`Collection transaction submitted! TX ID: ${response.txid}`);
+        
+        // Wait a bit then refresh the listing status
+        setTimeout(() => {
+          checkIfListed();
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('Error collecting NFT:', error);
+      toast('Failed to collect NFT. Please try again.');
+    } finally {
+      setIsCollecting(false);
+    }
+  }, [currentUserAddress, address, contractName, tokenId, listingPrice, checkIfListed]);
+
+  // Check if NFT is listed when component mounts
+  useEffect(() => {
+    checkIfListed();
+  }, [checkIfListed]);
   const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'bids' | 'activity'>('overview');
   const [contractTxData, setContractTxData] = useState<{
     burn_block_time: number;
@@ -213,12 +306,7 @@ export default function NFTDetailPage() {
       if (marketplaceResponse.ok) {
         const marketplaceData = await marketplaceResponse.json();
         if (marketplaceData.success) {
-          setPriceData({
-            stxPriceUsd: marketplaceData.stxPriceUsd,
-            nftPriceSatoshis: marketplaceData.marketplaceData.priceSatoshis,
-            nftPriceStx: marketplaceData.marketplaceData.priceStx,
-            nftPriceUsd: marketplaceData.marketplaceData.priceUsd
-          });
+          console.log('Found marketplace data:', marketplaceData);
           return;
         }
       }
@@ -252,7 +340,7 @@ export default function NFTDetailPage() {
       const priceSatoshis = nftPriceStx * SATOSHIS_PER_STX;
       const priceUsd = nftPriceStx * stxPriceUsd;
 
-      setPriceData({
+      console.log('Calculated price data:', {
         stxPriceUsd,
         nftPriceSatoshis: priceSatoshis,
         nftPriceStx: nftPriceStx,
@@ -495,7 +583,7 @@ export default function NFTDetailPage() {
     if (address && contractName && tokenId) {
       initializeData();
     }
-  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey]);
+  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, currentUserAddress]);
 
   useEffect(() => {
     const fetchCreatorData = async () => {
@@ -510,8 +598,10 @@ export default function NFTDetailPage() {
           } else {
             setCreatorProfile(null);
           }
-          const nfts = await getNftsByCreator(creatorAddr);
-          setCreatorNfts(nfts.filter(nft => nft.token_id !== tokenId)); // Exclude current NFT
+          // Temporarily disable getNftsByCreator until nfts table is created
+          // const nfts = await getNftsByCreator(creatorAddr);
+          // setCreatorNfts(nfts.filter(nft => nft.token_id !== tokenId)); // Exclude current NFT
+          setCreatorNfts([]); // Return empty array for now
         } catch {
           setCreatorProfile(null);
           setCreatorNfts([]);
@@ -687,11 +777,23 @@ export default function NFTDetailPage() {
                           <span className="text-sm text-muted-foreground">View on Explorer</span>
                           <ExternalLink className="w-4 h-4 ml-auto" />
                         </a>
-                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer">
+                        <div 
+                          onClick={checkIfListed}
+                          className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer"
+                        >
                           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                            <RefreshCw className="w-4 h-4" />
+                            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                           </div>
-                          <span className="text-sm text-muted-foreground">Refresh Metadata</span>
+                          <div className="flex-1">
+                            <span className="text-sm text-muted-foreground">
+                              {isLoading ? 'Checking listing status...' : 'Refresh Listing Status'}
+                            </span>
+                          </div>
+                          {!isLoading && (
+                            <Badge variant={isListed ? "default" : "secondary"} className="text-xs">
+                              {isListed ? "Listed" : "Not Listed"}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1081,16 +1183,66 @@ export default function NFTDetailPage() {
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-3 mt-6">
-                  <Button variant="ghost" size="sm" className="p-2 hover:text-white">
+                  {/* Loading indicator while checking listing status */}
+                  {isLoading && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 rounded-lg">
+                      <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Checking listing status...</span>
+                    </div>
+                  )}
+                  
+                  {/* Collect Button - Show if NFT is listed for sale and user is not the owner */}
+                  {!isLoading && 
+                   isListed && 
+                   listingPrice && 
+                   currentUserAddress && 
+                   owner && 
+                   currentUserAddress.toLowerCase() !== owner.toLowerCase() && (
+                    <Button 
+                      onClick={collectNFT}
+                      disabled={isCollecting}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 cursor-pointer"
+                    >
+                      {isCollecting ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Collecting...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4 mr-2" />
+                          Collect for {(listingPrice / 1000000).toFixed(6)} STX
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  
+                  {/* Show listing price if listed */}
+                  {!isLoading && isListed && listingPrice && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-muted/20 rounded-lg">
+                      <Coins className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">
+                        {(listingPrice / 1000000).toFixed(6)} STX
+                      </span>
+                    </div>
+                  )}
+                  
+                  <Button variant="ghost" size="sm" className="p-2 hover:text-white cursor-pointer">
                     <Heart className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="hover:text-white">
+                  <Button variant="ghost" size="sm" className="hover:text-white cursor-pointer">
                     <Share2 className="w-4 h-4 mr-2" />
                     Share
                   </Button>
-                  <Button variant="ghost" size="sm" className="hover:text-white">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Refresh
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="hover:text-white cursor-pointer"
+                    onClick={checkIfListed}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    {isLoading ? 'Checking...' : 'Refresh'}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1113,12 +1265,51 @@ export default function NFTDetailPage() {
                 <CardContent className="px-6">
                   <div className="space-y-0">
                     <div className="space-y-0">
-                      <Button
-                        className="w-full py-6 bg-accent-foreground hover:bg-accent-foreground cursor-pointer"
-                        disabled={!priceData}
-                      >
-                        {priceData ? `Mint` : 'Loading price...'}
-                      </Button>
+                      {/* Main Collect Button - Only show if not owner and conditions are met */}
+                      {(() => {
+                        const isOwner = currentUserAddress && owner && 
+                          currentUserAddress.toLowerCase() === owner.toLowerCase();
+                        const canCollect = !isOwner && isListed && listingPrice && currentUserAddress;
+                        
+                        if (isOwner) {
+                          return (
+                            <Button
+                              className="w-full py-6 bg-blue-500/20 border border-blue-500/40 text-blue-400 cursor-not-allowed"
+                              disabled={true}
+                            >
+                              You own this NFT
+                            </Button>
+                          );
+                        } else if (canCollect) {
+                          return (
+                            <Button
+                              className="w-full py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white cursor-pointer"
+                              onClick={collectNFT}
+                              disabled={isCollecting}
+                            >
+                              {isCollecting ? 'Collecting...' : `Collect for ${((listingPrice || 0) / 1000000).toFixed(6)} STX`}
+                            </Button>
+                          );
+                        } else if (!isListed) {
+                          return (
+                            <Button
+                              className="w-full py-6 bg-gray-600 text-gray-400 cursor-not-allowed"
+                              disabled={true}
+                            >
+                              Not listed for sale
+                            </Button>
+                          );
+                        } else {
+                          return (
+                            <Button
+                              className="w-full py-6 bg-gray-600 text-gray-400 cursor-not-allowed"
+                              disabled={true}
+                            >
+                              {!currentUserAddress ? 'Connect wallet to collect' : 'Loading...'}
+                            </Button>
+                          );
+                        }
+                      })()}
                     </div>
                   </div>
                 </CardContent>

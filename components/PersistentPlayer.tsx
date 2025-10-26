@@ -175,21 +175,21 @@ export default function PersistentPlayer() {
             <div className="flex items-center space-x-4">
               <button
                 onClick={previousTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <SkipBack size={16} />
               </button>
               
               <button
                 onClick={togglePlayPause}
-                className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform"
+                className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
               >
                 {isPlaying ? <Pause size={14} /> : <Play size={14} />}
               </button>
               
               <button
                 onClick={nextTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <SkipForward size={16} />
               </button>
@@ -281,7 +281,7 @@ export default function PersistentPlayer() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setIsShuffled(!isShuffled)}
-                className={`p-2 rounded-full transition-colors ${
+                className={`p-2 rounded-full transition-colors cursor-pointer ${
                   isShuffled ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -289,7 +289,7 @@ export default function PersistentPlayer() {
               </button>
               <button
                 onClick={() => setIsRepeating(!isRepeating)}
-                className={`p-2 rounded-full transition-colors ${
+                className={`p-2 rounded-full transition-colors cursor-pointer ${
                   isRepeating ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -301,21 +301,21 @@ export default function PersistentPlayer() {
             <div className="flex items-center justify-center space-x-4">
               <button
                 onClick={previousTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <SkipBack size={24} />
               </button>
               
               <button
                 onClick={togglePlayPause}
-                className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-primary/90 transition-colors"
+                className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-primary/90 transition-colors cursor-pointer"
               >
                 {isPlaying ? <Pause size={24} /> : <Play size={24} />}
               </button>
               
               <button
                 onClick={nextTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <SkipForward size={24} />
               </button>
@@ -349,7 +349,7 @@ export default function PersistentPlayer() {
                   <button
                     key={album.id}
                     onClick={() => setCurrentAlbum(album)}
-                    className={`w-full p-3 rounded-lg transition-colors text-left hover:bg-muted/50 ${
+                    className={`w-full p-3 rounded-lg transition-colors text-left hover:bg-muted/50 cursor-pointer ${
                       currentAlbum?.id === album.id
                         ? 'bg-primary/20 border border-primary/40'
                         : 'bg-transparent'
