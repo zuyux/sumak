@@ -152,14 +152,14 @@ export default function PersistentPlayer() {
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border">
       {/* Collapsed view - Grid layout similar to Spotify */}
       {!isExpanded && (
-        <div className="grid grid-cols-3 items-center px-4 py-2 h-20 gap-4">
+        <div className="grid grid-cols-3 items-center px-0 py-0 h-20 gap-4">
           {/* Left section - Song info (1/3 width) */}
           <div 
-            className="flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-2 rounded-lg transition-colors"
+            className="flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-colors"
             onClick={navigateToCurrentNFT}
             title="View NFT details"
           >
-            <div className="w-14 h-14 relative rounded overflow-hidden flex-shrink-0">
+            <div className="w-20 h-20 relative rounded overflow-hidden flex-shrink-0">
               <Image
                 src={currentAlbum.metadata.image}
                 alt={getTitle(currentAlbum.metadata)}
@@ -233,11 +233,12 @@ export default function PersistentPlayer() {
                 value={localVolume}
                 onChange={handleVolumeChange}
                 className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
+                style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
               />
             </div>
             <button
               onClick={() => setIsExpanded(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer mx-4"
             >
               <ChevronUp size={16} />
             </button>
@@ -253,7 +254,7 @@ export default function PersistentPlayer() {
             <h3 className="text-lg font-semibold">Now Playing</h3>
             <button
               onClick={() => setIsExpanded(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer mx-4"
             >
               <ChevronDown size={20} />
             </button>
@@ -342,7 +343,7 @@ export default function PersistentPlayer() {
                 step="0.01"
                 value={localVolume}
                 onChange={handleVolumeChange}
-                className="w-20 h-1 bg-muted rounded-lg appearance-none cursor-pointer slider"
+                className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
                 style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
               />
               <span className="text-xs text-muted-foreground w-8 text-right">
@@ -399,7 +400,7 @@ export default function PersistentPlayer() {
                       }`}
                       title="View NFT details"
                     >
-                      <ChevronUp className="w-4 h-4 transform rotate-45" />
+                      <ChevronUp className="w-4 h-4 transform rotate-45 mr-8" />
                     </button>
                   </div>
                 ))}
@@ -411,7 +412,7 @@ export default function PersistentPlayer() {
 
       <style jsx>{`
         .slider {
-          background: linear-gradient(to right, white 0%, white calc(var(--volume-percentage) * 1%), hsl(var(--muted)) calc(var(--volume-percentage) * 1%), hsl(var(--muted)) 100%);
+          background: linear-gradient(to right, white 0%, white ${localVolume * 100}%, #404040 ${localVolume * 100}%, #404040 100%);
           outline: none;
           position: relative;
           height: 4px;
@@ -426,13 +427,13 @@ export default function PersistentPlayer() {
         
         .slider::-webkit-slider-thumb {
           appearance: none;
-          width: 7px;
-          height: 7px;
+          width: 12px;
+          height: 12px;
           border-radius: 50%;
           background: white;
           cursor: pointer;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-          border: 1px solid hsl(var(--primary));
+          border: none;
           transition: all 0.2s ease;
           position: relative;
           z-index: 2;
@@ -451,12 +452,12 @@ export default function PersistentPlayer() {
         }
         
         .slider::-moz-range-thumb {
-          width: 7px;
-          height: 7px;
+          width: 12px;
+          height: 12px;
           border-radius: 50%;
           background: white;
           cursor: pointer;
-          border: 1px solid hsl(var(--primary));
+          border: none;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
           transition: all 0.2s ease;
         }

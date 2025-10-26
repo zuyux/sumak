@@ -115,10 +115,10 @@ export default function Page() {
 
 
   return (
-    <div className="bg-transparent">
+    <div className="bg-transparent min-h-screen">
       <Navbar />
       
-      <div className="absolute flex flex-col items-center justify-center text-foreground p-8 overflow-hidden">
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground p-4 md:p-8 overflow-hidden">
         {/* Blurred Background Image */}
         {currentAlbum?.metadata?.image && (
           <>
@@ -147,9 +147,9 @@ export default function Page() {
         {/* Loading Overlay */}
         {isLoading && (
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-              <p className="text-foreground text-lg">Loading music metadata...</p>
+            <div className="flex flex-col items-center px-4">
+              <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-primary mb-4"></div>
+              <p className="text-foreground text-sm md:text-lg text-center">Loading music metadata...</p>
             </div>
           </div>
         )}
@@ -157,17 +157,17 @@ export default function Page() {
         <OrbVisualizer/>
 
         {/* Audio Visualizer Timeline */}
-        <div className="fixed bottom-6 left-0 right-0 mb-6">
+        <div className="fixed bottom-20 md:bottom-6 left-0 right-0 mb-6">
           <div className="flex flex-col items-center mb-2">
             <canvas
               ref={canvasRef}
               height={60}
-              className="w-full h-16 bg-transparent"
+              className="w-full h-12 md:h-16 bg-transparent"
               onClick={handleCanvasClick}
               style={{ cursor: 'pointer' }}
             />
           </div>
-          <div className="flex justify-between px-4 text-sm text-muted-foreground mt-2">
+          <div className="flex justify-between px-2 md:px-4 text-xs md:text-sm text-muted-foreground mt-2">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>

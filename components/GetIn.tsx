@@ -132,14 +132,14 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
           {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
         </div>
       ) : (
-        <div className='fixed top-3 right-0 md:right-4 z-100'>
+        <div className='fixed top-3 right-2 md:right-4 z-100'>
           <Button
             onClick={() => setShowGetInModal(true)}
             className="title rounded-md px-2 md:px-6 py-4 md:py-2 text-xs md:text-sm bg-background/50 hover:bg-[#000] text-foreground cursor-pointer select-none"
             {...buttonProps}
           >
-            {children || 'ENTRAR'}
-            <Pill className='ml-2' />
+            <span className="hidden md:inline">{children || 'ENTRAR'}</span>
+            <Pill className='ml-0 md:ml-2' />
           </Button>
         </div>
       )}
