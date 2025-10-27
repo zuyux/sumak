@@ -356,17 +356,17 @@ export default function MintPage() {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       console.log(`Selected audio file: ${file.name}, Size: ${fileSizeMB}MB`);
       
-      // Add file size validation (45MB for audio files to ensure server compatibility)
-      if (file.size > 45 * 1024 * 1024) {
-        setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 45MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
+      // Add file size validation (25MB for audio files based on successful testing)
+      if (file.size > 25 * 1024 * 1024) {
+        setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 25MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
         setAudioFile(null);
         setAudioPreviewUrl(null);
         return;
       }
       
-      // Warn if file is getting close to the limit (above 35MB)
-      if (file.size > 35 * 1024 * 1024) {
-        console.warn(`File size warning: ${fileSizeMB}MB is close to the 45MB limit`);
+      // Warn if file is getting close to the limit (above 20MB)
+      if (file.size > 20 * 1024 * 1024) {
+        console.warn(`File size warning: ${fileSizeMB}MB is close to the 25MB limit`);
       }
       
       // Validate file type for audio with MIME type and extension validation
@@ -631,8 +631,8 @@ export default function MintPage() {
       if (!validExtensions.includes(fileExtension)) {
         errors.audioFile = 'Tipo de archivo inválido. Por favor sube archivos de audio .mp3, .wav, .flac, .aac, .m4a, o .ogg';
       }
-      if (audioFile.size > 45 * 1024 * 1024) {
-        errors.audioFile = 'El tamaño del archivo debe ser menor a 45MB para garantizar compatibilidad con el servidor';
+      if (audioFile.size > 25 * 1024 * 1024) {
+        errors.audioFile = 'El tamaño del archivo debe ser menor a 25MB para garantizar compatibilidad con el servidor';
       }
     }
     
@@ -1377,6 +1377,12 @@ export default function MintPage() {
       }
 
       console.log('Upload successful, CID:', sanitizedCid);
+      console.log('Response data:', {
+        imageUrl: responseData.imageUrl,
+        audioUrl: responseData.audioUrl,
+        imageCid: responseData.imageCid,
+        audioCid: responseData.audioCid
+      });
 
       // Step 2: Deploy contract with retry logic
       setLoadingState('deploying');
@@ -1416,20 +1422,20 @@ export default function MintPage() {
         
         const nftData: NFTSaveData = {
           tokenId: 1, // First token in contract
-          contractAddress: deployResult.contractAddress,
+          contractAddress: `${deployResult.contractAddress}.${deployResult.contractName || deployData.mintName}`,
           contractName: deployResult.contractName || deployData.mintName,
           creatorAddress: effectiveAddress!,
           name: name.trim(),
           description: description.trim() || undefined,
           artist: artist.trim() || undefined,
-          imageUrl: responseData.imageUrl,
-          imageCid: responseData.imageCid,
-          audioUrl: responseData.audioUrl,
-          audioCid: responseData.audioCid,
+          imageUrl: responseData.imageUrl || undefined,
+          imageCid: responseData.imageCid || undefined,
+          audioUrl: responseData.audioUrl || undefined,
+          audioCid: responseData.audioCid || undefined,
           externalUrl: externalUrl.trim() || undefined,
           audioFormat: responseData.audioFormat || audioFile?.type.split('/')[1],
-          durationSeconds: responseData.durationSeconds,
-          fileSizeBytes: responseData.fileSizeBytes || audioFile?.size,
+          durationSeconds: responseData.durationSeconds || undefined,
+          fileSizeBytes: responseData.fileSizeBytes || audioFile?.size || undefined,
           metadataCid: sanitizedCid,
           royaltyPercentage: parseFloat(royalties.replace('%', '')) * 100 || 500, // Convert to basis points
           attributes: responseData.attributes || (attributes ? JSON.parse(attributes) : undefined),
@@ -1457,7 +1463,8 @@ export default function MintPage() {
       // Redirect using contractAddress and contractName
       // Redirect to NFT detail page, defaulting to tokenId 1 if not present
       const tokenId = responseData.tokenId || responseData.token_id || responseData.id || 1;
-      const redirectPath = `/${deployResult.contractAddress}/${deployResult.contractName}/${tokenId}`;
+      const fullContractAddress = `${deployResult.contractAddress}.${deployResult.contractName}`;
+      const redirectPath = `/${fullContractAddress}/${deployResult.contractName}/${tokenId}`;
       
       // Wait a bit to show the success message
       setTimeout(() => {
@@ -1494,7 +1501,7 @@ export default function MintPage() {
           errorSuggestion = 'Por favor verifica todos los campos para entrada válida e intenta de nuevo.';
         } else if (error.message.includes('file') || error.message.includes('size') || error.message.includes('413')) {
           errorMessage = 'Error de subida de archivo.';
-          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 45MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
+          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 25MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
         } else {
           errorMessage = error.message;
           errorSuggestion = 'Si este problema persiste, por favor contacta soporte.';
@@ -1632,7 +1639,7 @@ export default function MintPage() {
                   </label>
                   <div className='text-center text-sm'>
                     <p className="text-[#777] mt-2">
-                      Tamaño Máximo: 45MB
+                      Tamaño Máximo: 25MB
                       <br/>
                       .mp3, .wav, .flac, .aac, .m4a, .ogg
                       <br/>

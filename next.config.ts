@@ -1,13 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Configure API routes to handle larger file uploads
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb', // Set to 50MB to handle large audio files
-    },
-    responseLimit: false,
-  },
   images: {
     remotePatterns: [
       {

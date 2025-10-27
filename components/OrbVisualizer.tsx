@@ -19,6 +19,20 @@ const OrbVisualizer: React.FC = () => {
   const clockRef = useRef<THREE.Clock | null>(null);
   const floatingParticlesRef = useRef<HTMLDivElement>(null);
   
+  // Mouse/touch interaction states
+  const mouseRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const rotationRef = useRef({ x: 0, y: 0 });
+  const lastMouseRef = useRef({ x: 0, y: 0 });
+  const [isHovering, setIsHovering] = useState(false);
+  const [isGrabbing, setIsGrabbing] = useState(false);
+  
+  // Inertia system for smooth rotation
+  const velocityRef = useRef({ x: 0, y: 0 });
+  const lastTimeRef = useRef(0);
+  const dampingFactor = 0.95; // How quickly the inertia decays (0.95 = 5% decay per frame)
+  const inertiaMultiplier = 0.8; // How much of the velocity to apply as inertia
+  
   const { audioRef, isPlaying, currentAlbum } = useMusicPlayer();
   
   const [isInitialized, setIsInitialized] = useState(false);
@@ -31,6 +45,68 @@ const OrbVisualizer: React.FC = () => {
     reactivity: 2.0,
     sensitivity: 5.0
   }), []);
+
+  // Mouse/Touch interaction handlers
+  const handleMouseDown = (event: React.MouseEvent | React.TouchEvent) => {
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    isDraggingRef.current = true;
+    setIsGrabbing(true);
+    lastMouseRef.current = { x: clientX, y: clientY };
+    lastTimeRef.current = performance.now();
+    
+    // Reset velocity when starting a new drag
+    velocityRef.current = { x: 0, y: 0 };
+    
+    // Prevent default to avoid scrolling/zooming on touch devices
+    event.preventDefault();
+  };
+
+  const handleMouseMove = (event: React.MouseEvent | React.TouchEvent) => {
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    
+    mouseRef.current = { x: clientX, y: clientY };
+
+    if (isDraggingRef.current) {
+      const currentTime = performance.now();
+      const deltaTime = currentTime - lastTimeRef.current;
+      const deltaX = clientX - lastMouseRef.current.x;
+      const deltaY = clientY - lastMouseRef.current.y;
+      
+      // Apply rotation with sensitivity
+      const sensitivity = 0.01;
+      rotationRef.current.x += deltaY * sensitivity;
+      rotationRef.current.y += deltaX * sensitivity;
+      
+      // Calculate velocity for inertia (pixels per millisecond)
+      if (deltaTime > 0) {
+        velocityRef.current.x = deltaY / deltaTime;
+        velocityRef.current.y = deltaX / deltaTime;
+      }
+      
+      lastMouseRef.current = { x: clientX, y: clientY };
+      lastTimeRef.current = currentTime;
+      event.preventDefault();
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+    setIsGrabbing(false);
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+    setIsGrabbing(false);
+    isDraggingRef.current = false;
+  };
+
 
   // Initialize floating particles
   useEffect(() => {
@@ -601,11 +677,34 @@ const OrbVisualizer: React.FC = () => {
         audioLevel = ((sum / frequencyDataRef.current.length / 255) * settings.sensitivity) / 5;
       }
 
-      // Update orb - exact rotation calculations from reference
+      // Update orb - exact rotation calculations from reference plus manual rotation
       if (anomalyObjectRef.current) {
         const audioRotationFactor = 1 + audioLevel * settings.reactivity;
-        anomalyObjectRef.current.rotation.y += 0.005 * settings.rotationSpeed * audioRotationFactor;
-        anomalyObjectRef.current.rotation.z += 0.002 * settings.rotationSpeed * audioRotationFactor;
+        
+        // Apply automatic rotation
+        const autoRotationY = 0.005 * settings.rotationSpeed * audioRotationFactor;
+        const autoRotationZ = 0.002 * settings.rotationSpeed * audioRotationFactor;
+        
+        // Apply manual rotation from mouse/touch interaction with inertia
+        anomalyObjectRef.current.rotation.x = rotationRef.current.x;
+        anomalyObjectRef.current.rotation.y += autoRotationY + rotationRef.current.y * 0.01;
+        anomalyObjectRef.current.rotation.z += autoRotationZ;
+
+        // Apply inertia system when not actively dragging
+        if (!isDraggingRef.current) {
+          // Apply velocity-based inertia
+          const sensitivity = 0.01;
+          rotationRef.current.x += velocityRef.current.x * sensitivity * inertiaMultiplier;
+          rotationRef.current.y += velocityRef.current.y * sensitivity * inertiaMultiplier;
+          
+          // Apply damping to velocity for smooth deceleration
+          velocityRef.current.x *= dampingFactor;
+          velocityRef.current.y *= dampingFactor;
+          
+          // Stop very small velocities to prevent infinite spinning
+          if (Math.abs(velocityRef.current.x) < 0.001) velocityRef.current.x = 0;
+          if (Math.abs(velocityRef.current.y) < 0.001) velocityRef.current.y = 0;
+        }
 
         // Update materials
         anomalyObjectRef.current.children.forEach((child: THREE.Object3D) => {
@@ -716,6 +815,83 @@ const OrbVisualizer: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Global mouse/touch event listeners for drag functionality
+  useEffect(() => {
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (isDraggingRef.current) {
+        const currentTime = performance.now();
+        const deltaTime = currentTime - lastTimeRef.current;
+        const deltaX = event.clientX - lastMouseRef.current.x;
+        const deltaY = event.clientY - lastMouseRef.current.y;
+        
+        const sensitivity = 0.01;
+        rotationRef.current.x += deltaY * sensitivity;
+        rotationRef.current.y += deltaX * sensitivity;
+        
+        // Calculate velocity for inertia
+        if (deltaTime > 0) {
+          velocityRef.current.x = deltaY / deltaTime;
+          velocityRef.current.y = deltaX / deltaTime;
+        }
+        
+        lastMouseRef.current = { x: event.clientX, y: event.clientY };
+        lastTimeRef.current = currentTime;
+        event.preventDefault();
+      }
+    };
+
+    const handleGlobalTouchMove = (event: TouchEvent) => {
+      if (isDraggingRef.current && event.touches.length > 0) {
+        const touch = event.touches[0];
+        const currentTime = performance.now();
+        const deltaTime = currentTime - lastTimeRef.current;
+        const deltaX = touch.clientX - lastMouseRef.current.x;
+        const deltaY = touch.clientY - lastMouseRef.current.y;
+        
+        const sensitivity = 0.01;
+        rotationRef.current.x += deltaY * sensitivity;
+        rotationRef.current.y += deltaX * sensitivity;
+        
+        // Calculate velocity for inertia
+        if (deltaTime > 0) {
+          velocityRef.current.x = deltaY / deltaTime;
+          velocityRef.current.y = deltaX / deltaTime;
+        }
+        
+        lastMouseRef.current = { x: touch.clientX, y: touch.clientY };
+        lastTimeRef.current = currentTime;
+        event.preventDefault();
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsGrabbing(false);
+      }
+    };
+
+    const handleGlobalTouchEnd = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsGrabbing(false);
+      }
+    };
+
+    // Add global listeners
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd);
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+    };
+  }, []);
+
   return (
     <>
       {/* Three.js container */}
@@ -731,6 +907,25 @@ const OrbVisualizer: React.FC = () => {
           top: 0,
           left: 0
         }}
+      />
+
+      {/* Interactive orb area overlay */}
+      <div 
+        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] z-35 rounded-full transition-all duration-200"
+        style={{
+          cursor: isGrabbing ? 'grabbing' : 'grab',
+          pointerEvents: 'auto',
+          backgroundColor: isHovering ? 'rgba(255, 78, 66, 0.02)' : 'transparent',
+          border: isHovering ? '1px solid rgba(255, 78, 66, 0.1)' : '1px solid transparent'
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleMouseDown}
+        onTouchMove={handleMouseMove}
+        onTouchEnd={handleMouseUp}
       />
 
       {/* Grid overlay */}

@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "app/api/files/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/test-limits/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["iad1"],
+  "framework": "nextjs"
+}

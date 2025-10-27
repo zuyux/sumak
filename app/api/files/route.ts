@@ -32,12 +32,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file sizes with appropriate limits for Vercel deployment
-    const maxMintSize = 45 * 1024 * 1024; // 45MB for audio files (leaving room for other data)
+    // Based on testing: 5MB+ files work successfully, so we can be more generous
+    const maxMintSize = 25 * 1024 * 1024; // 25MB for audio files (tested working up to 5MB+)
     const maxImageSize = 10 * 1024 * 1024;  // 10MB for images
     
     if (mintFile.size > maxMintSize) {
       return NextResponse.json({ 
-        error: `Audio file too large. Maximum size is 45MB, received ${Math.round(mintFile.size / 1024 / 1024)}MB. Please compress your audio file.` 
+        error: `Audio file too large. Maximum size is 25MB, received ${Math.round(mintFile.size / 1024 / 1024)}MB. Please compress your audio file.` 
       }, { status: 413 });
     }
 
@@ -238,7 +239,20 @@ export async function POST(request: NextRequest) {
     }
     const metadataCid = metadataResult.IpfsHash;
 
-    return NextResponse.json({ metadataCid }, { status: 200 });
+    // Return comprehensive response with all URLs and metadata
+    return NextResponse.json({ 
+      success: true,
+      metadataCid,
+      imageUrl,
+      imageCid,
+      audioUrl: mintUrl,
+      audioCid: mintCid,
+      audioFormat: mintFile.type.split('/')[1],
+      durationSeconds: null, // Could be extracted if needed
+      fileSizeBytes: mintFile.size,
+      attributes: metadata.attributes,
+      metadata
+    }, { status: 200 });
   } catch (error) {
     console.error('Error in files API route:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
