@@ -193,12 +193,31 @@ export default function PersistentPlayer() {
             <div className={`w-20 h-20 relative rounded overflow-hidden flex-shrink-0 transition-all duration-300 ${
               isTransitioning ? 'ring-2 ring-primary/50' : ''
             }`}>
-              <Image
-                src={currentAlbum.metadata.image}
-                alt={getTitle(currentAlbum.metadata)}
-                fill
-                className="object-cover"
-              />
+              {currentAlbum?.metadata?.image ? (
+                <Image
+                  src={currentAlbum.metadata.image}
+                  alt={getTitle(currentAlbum.metadata)}
+                  fill
+                  className="object-cover"
+                  onError={(e) => {
+                    console.error('PersistentPlayer image failed to load:', {
+                      src: currentAlbum?.metadata?.image,
+                      title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown',
+                      error: e
+                    });
+                  }}
+                  onLoad={() => {
+                    console.log('PersistentPlayer image loaded successfully:', {
+                      src: currentAlbum?.metadata?.image,
+                      title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown'
+                    });
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-muted flex items-center justify-center">
+                  <span className="text-xs text-muted-foreground">No Image</span>
+                </div>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">
@@ -316,6 +335,16 @@ export default function PersistentPlayer() {
                 alt={getTitle(currentAlbum.metadata)}
                 fill
                 className="object-cover"
+                onError={(e) => {
+                  console.error('Expanded view image error:', {
+                    src: currentAlbum.metadata?.image,
+                    title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown',
+                    event: e
+                  });
+                }}
+                onLoad={() => {
+                  console.log('Expanded view image loaded:', currentAlbum.metadata?.image);
+                }}
               />
             </div>
             <div className="min-w-0 flex-1">

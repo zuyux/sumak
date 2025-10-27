@@ -115,13 +115,10 @@ export class AssetPreloader {
   static getCriticalAssets(): string[] {
     return [
       '/models/default.glb',
-      '/home.svg',
-      '/SUMAK-DIY.svg',
-      '/SUMAK-DIY.png',
+      '/SUMAK.png',
+      '/LOGO.png',
       '/loader.gif',
       '/loaderb.gif',
-      '/delta-logo.svg',
-      '/delta-logo.png',
       // Add fonts if they're critical
       '/fonts/ChakraPetch-Regular.woff2',
       '/fonts/ChakraPetch-Bold.woff2',
@@ -134,8 +131,9 @@ export class AssetPreloader {
   static getPageAssets(page: string): string[] {
     const assetsMap: Record<string, string[]> = {
       home: [
-        '/01.png', '/02.png', '/03.png', '/04.png', 
-        '/05.png', '/06.png', '/07.png'
+        // Remove non-existent numbered images
+        '/globe.svg',
+        '/mail-ico.svg'
       ],
       mint: [
         '/add-ico.svg',
@@ -143,7 +141,9 @@ export class AssetPreloader {
       ],
       wallet: [
         '/wallet-ico.svg',
-        '/seed-ico.svg'
+        '/seed-ico.svg',
+        '/leather.svg',
+        '/xverse.svg'
       ],
       // Add more pages as needed
     };

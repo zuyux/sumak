@@ -356,17 +356,17 @@ export default function MintPage() {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       console.log(`Selected audio file: ${file.name}, Size: ${fileSizeMB}MB`);
       
-      // Add file size validation (50MB for audio files to ensure server compatibility)
-      if (file.size > 50 * 1024 * 1024) {
-        setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 50MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
+      // Add file size validation (45MB for audio files to ensure server compatibility)
+      if (file.size > 45 * 1024 * 1024) {
+        setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 45MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
         setAudioFile(null);
         setAudioPreviewUrl(null);
         return;
       }
       
-      // Warn if file is getting close to the limit (above 40MB)
-      if (file.size > 40 * 1024 * 1024) {
-        console.warn(`File size warning: ${fileSizeMB}MB is close to the 50MB limit`);
+      // Warn if file is getting close to the limit (above 35MB)
+      if (file.size > 35 * 1024 * 1024) {
+        console.warn(`File size warning: ${fileSizeMB}MB is close to the 45MB limit`);
       }
       
       // Validate file type for audio with MIME type and extension validation
@@ -631,8 +631,8 @@ export default function MintPage() {
       if (!validExtensions.includes(fileExtension)) {
         errors.audioFile = 'Tipo de archivo inválido. Por favor sube archivos de audio .mp3, .wav, .flac, .aac, .m4a, o .ogg';
       }
-      if (audioFile.size > 50 * 1024 * 1024) {
-        errors.audioFile = 'El tamaño del archivo debe ser menor a 50MB para garantizar compatibilidad con el servidor';
+      if (audioFile.size > 45 * 1024 * 1024) {
+        errors.audioFile = 'El tamaño del archivo debe ser menor a 45MB para garantizar compatibilidad con el servidor';
       }
     }
     
@@ -1236,9 +1236,9 @@ export default function MintPage() {
       const locationData = getLocationForJson();
       
       // Parse the form attributes and convert to metadata-1.json format
-      const parsedAttributes = JSON.parse(attributes);
-      const parsedProperties = JSON.parse(properties);
-      const parsedCustomization = JSON.parse(customizationData);
+      const parsedAttributes = attributes.trim() ? JSON.parse(attributes) : {};
+      const parsedProperties = properties.trim() ? JSON.parse(properties) : {};
+      const parsedCustomization = customizationData.trim() ? JSON.parse(customizationData) : {};
       
       // Convert attributes object to array format with trait_type and value
       const attributesArray = Object.entries(parsedAttributes).map(([key, value]) => ({
@@ -1492,9 +1492,9 @@ export default function MintPage() {
         } else if (error.message.includes('validation') || error.message.includes('Invalid')) {
           errorMessage = 'Falló la validación de entrada.';
           errorSuggestion = 'Por favor verifica todos los campos para entrada válida e intenta de nuevo.';
-        } else if (error.message.includes('file') || error.message.includes('size')) {
+        } else if (error.message.includes('file') || error.message.includes('size') || error.message.includes('413')) {
           errorMessage = 'Error de subida de archivo.';
-          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 50MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
+          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 45MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
         } else {
           errorMessage = error.message;
           errorSuggestion = 'Si este problema persiste, por favor contacta soporte.';
@@ -1632,7 +1632,7 @@ export default function MintPage() {
                   </label>
                   <div className='text-center text-sm'>
                     <p className="text-[#777] mt-2">
-                      Tamaño Máximo: 50MB
+                      Tamaño Máximo: 45MB
                       <br/>
                       .mp3, .wav, .flac, .aac, .m4a, .ogg
                       <br/>

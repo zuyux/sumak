@@ -2,6 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { pinata } from "@/utils/config";
 import axios from 'axios';
 
+export const maxDuration = 60; // 60 seconds timeout
+export const dynamic = 'force-dynamic';
+
+// Configure maximum request size
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 export async function POST(request: NextRequest) {
   try {
     console.log('Files API called');
@@ -19,13 +31,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No mint file provided" }, { status: 400 });
     }
 
-    // Validate file sizes with appropriate limits
-    const maxMintSize = 300 * 1024 * 1024; // 300MB for mints
+    // Validate file sizes with appropriate limits for Vercel deployment
+    const maxMintSize = 45 * 1024 * 1024; // 45MB for audio files (leaving room for other data)
     const maxImageSize = 10 * 1024 * 1024;  // 10MB for images
     
     if (mintFile.size > maxMintSize) {
       return NextResponse.json({ 
-        error: `Mint file too large. Maximum size is 300MB, received ${Math.round(mintFile.size / 1024 / 1024)}MB` 
+        error: `Audio file too large. Maximum size is 45MB, received ${Math.round(mintFile.size / 1024 / 1024)}MB. Please compress your audio file.` 
       }, { status: 413 });
     }
 
