@@ -2,6 +2,8 @@
 
 SUMAK is a decentralized music NFT marketplace built on the Stacks blockchain that enables artists to mint, trade, and showcase music NFTs with full ownership control and royalty management.
 
+Contrato: [https://explorer.hiro.so/txid/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ](https://explorer.hiro.so/txid/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ.shakedown-1761419817658?chain=testnet)
+
 ## 🎵 Overview
 
 SUMAK revolutionizes music ownership by storing metadata and rights on-chain while leveraging IPFS for audio storage. Artists can mint music tracks as NFTs, maintain full ownership control, and earn royalties from secondary sales.
@@ -37,6 +39,8 @@ SUMAK revolutionizes music ownership by storing metadata and rights on-chain whi
 
 ### ⚙️ Smart Contract Features
 
+Contrato: [explorer.hiro](https://explorer.hiro.so/txid/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ.shakedown-1761419817658?chain=testnet)
+
 - **Royalty Management**: Configurable royalty percentages (up to 10%)
 - **Marketplace Integration**: Built-in buying/selling with commission handling
 - **Ownership Transfer**: Secure NFT transfers with proper validation
@@ -51,6 +55,7 @@ SUMAK revolutionizes music ownership by storing metadata and rights on-chain whi
 - **Tailwind CSS** - Utility-first styling with dark/light themes
 - **Framer Motion** - Smooth animations and transitions
 - **Radix UI** - Accessible component primitives
+- **Figma** - [Sumak UI](https://www.figma.com/design/7jjSrGg5C6qe3c8aYlkXfs/sumak-sounds?node-id=0-1&t=7xomPNNu1ChfHIps-1)
 
 ### Blockchain & Web3
 
