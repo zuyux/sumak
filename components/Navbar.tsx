@@ -1,7 +1,6 @@
 
 'use client';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Search } from 'lucide-react';
 
 import { useState } from 'react';
@@ -18,14 +17,7 @@ export const Navbar = () => {
           <div className="grid grid-cols-3 h-12 items-center">
             {/* Left: Logo */}
             <div className="flex justify-start">
-              <Link href="/" className="flex items-center">
-                <Image
-                  src="/LOGO.png"
-                  alt="Logo"
-                  width={36}
-                  height={36}
-                />
-              </Link>
+              <Link href="/"><h1 className='title mx-3 my-3 opacity-55 hover:opacity-100'>SUMAK</h1></Link>
             </div>
             
             {/* Center: Search Input */}
@@ -34,7 +26,7 @@ export const Navbar = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-100" />
                 <input
                   type="text"
-                  placeholder="What to play?"
+                  placeholder="what to play?"
                   className="w-full pl-10 pr-4 py-2 bg-background/10 backdrop-blur-sm border border-[#111]/50 rounded-full text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all mobile-hide-placeholder"
                   onClick={() => setSearchOpen(true)}
                   readOnly

@@ -4,7 +4,8 @@ import Footer from '@/components/Footer';
 import { Navbar } from '@/components/Navbar';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import OrbVisualizer from '@/components/OrbVisualizer';
-import { useRef, useEffect, useCallback } from 'react';
+import Image from 'next/image';
+import { useRef, useEffect, useCallback, useState } from 'react';
 
 export default function Page() {
   const {
@@ -18,6 +19,12 @@ export default function Page() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const [backgroundImageLoaded, setBackgroundImageLoaded] = useState(false);
+
+  // Reset background image state when album changes
+  useEffect(() => {
+    setBackgroundImageLoaded(false); // Reset load state when album changes
+  }, [currentAlbum?.id, currentAlbum?.metadata]);
 
   // Format time from seconds to mm:ss
   const formatTime = (time: number) => {
@@ -119,30 +126,55 @@ export default function Page() {
       <Navbar />
       
       <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground p-4 md:p-8 overflow-hidden">
-        {/* Blurred Background Image */}
-        {currentAlbum?.metadata?.image && (
+        {/* Blurred Background Image with proper loading */}
+        {currentAlbum?.metadata?.image ? (
           <>
+            {/* Use Next.js Image component for better loading control */}
             <div 
-              className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage: `url(${currentAlbum.metadata.image})`,
-                filter: 'blur(40px) brightness(0.4)',
-                transform: 'scale(1.1)',
+              className="fixed inset-0" 
+              style={{ 
                 zIndex: -20,
+                opacity: backgroundImageLoaded ? 1 : 0,
+                transition: 'opacity 1s ease-in-out'
               }}
-            />
+            >
+              <Image
+                key={`bg-img-${currentAlbum.id}`}
+                src={currentAlbum.metadata.image}
+                alt="Background"
+                fill
+                className="object-cover"
+                style={{
+                  filter: 'blur(40px) brightness(0.4)',
+                  transform: 'scale(1.1)',
+                }}
+                onLoad={() => setBackgroundImageLoaded(true)}
+                onError={() => setBackgroundImageLoaded(false)}
+                priority={false}
+                unoptimized={true} // Since these are IPFS images
+              />
+            </div>
             {/* Dark overlay for better text readability */}
             <div 
-              className="fixed inset-0 w-full h-full bg-black/10"
-              style={{ zIndex: -10 }}
+              className="fixed inset-0 w-full h-full bg-black/20"
+              style={{ 
+                zIndex: -10,
+                opacity: backgroundImageLoaded ? 1 : 0,
+                transition: 'opacity 1s ease-in-out'
+              }}
             />
           </>
-        )}
+        ) : null}
         
-        {/* Fallback background when no image */}
-        {!currentAlbum?.metadata?.image && (
-          <div className="fixed inset-0 bg-background" style={{ zIndex: -30 }} />
-        )}
+        {/* Fallback background when no image or loading failed */}
+        <div 
+          className="fixed inset-0 bg-gradient-to-br from-gray-900 to-black" 
+          style={{ 
+            zIndex: -30,
+            opacity: (!currentAlbum?.metadata?.image || !backgroundImageLoaded) ? 1 : 0,
+            transition: 'opacity 1s ease-in-out'
+          }} 
+        />
         
         {/* Loading Overlay */}
         {isLoading && (

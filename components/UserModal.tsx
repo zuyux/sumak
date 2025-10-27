@@ -171,7 +171,7 @@ export default function UserModal({ onClose }: UserModalProps) {
           {/* MINT button on the left */}
           <button
             onClick={() => { onClose(); router.push('/mint'); }}
-            className="px-6 py-1.5 bg-background/10 border border-foreground/50 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 cursor-pointer select-none mr-3"
+            className="px-6 py-1.5 bg-background/10 border border-foreground/50 text-foreground text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 cursor-pointer select-none mr-3"
           >
             MINT
           </button>

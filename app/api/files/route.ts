@@ -43,6 +43,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server configuration error - missing Pinata credentials" }, { status: 500 });
     }
 
+    console.log('Pinata configuration check passed');
+    console.log('Upload starting for:', {
+      fileName: mintFile.name,
+      fileSize: `${(mintFile.size / 1024 / 1024).toFixed(2)} MB`,
+      fileType: mintFile.type
+    });
+
     // Upload the mint file to Pinata with error handling
     let mintResult;
     try {

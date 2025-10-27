@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 interface NFTMetadata {
   name: string;
@@ -33,11 +34,45 @@ interface NFTMetadata {
   };
 }
 
+interface NFTRecord {
+  id: number;
+  token_id: number;
+  contract_address: string;
+  contract_name: string;
+  creator_address: string;
+  current_owner: string;
+  name: string;
+  description: string | null;
+  artist: string | null;
+  image_url: string | null;
+  image_cid: string | null;
+  audio_url: string | null;
+  audio_cid: string | null;
+  external_url: string | null;
+  audio_format: string | null;
+  duration_seconds: number | null;
+  file_size_bytes: number | null;
+  metadata_cid: string;
+  royalty_percentage: number | null;
+  attributes: Record<string, unknown> | null;
+  mint_tx_id: string;
+  block_height: number | null;
+  mint_location_lat: number | null;
+  mint_location_lng: number | null;
+  created_at: string;
+  updated_at: string;
+  is_listed: boolean;
+  list_price: number | null;
+  list_currency: string;
+  status: string;
+}
+
 interface Album {
   id: string;
   metadataUrl: string;
   nftUrl?: string;
   metadata?: NFTMetadata;
+  nftRecord?: NFTRecord; // Add NFT record data
 }
 
 interface MusicPlayerContextType {
@@ -63,15 +98,90 @@ interface MusicPlayerContextType {
   setIsRepeating: (repeating: boolean) => void;
   seekTo: (time: number) => void;
   navigateToCurrentNFT: () => void;
+  refreshMusicQueue: () => void; // New function to refresh the music queue
   
   // Helper functions
-  createNFTUrl: (contractAddress: string, contractName: string, tokenId: number) => string;
+  createNFTUrl: (creatorAddress: string, contractName: string, tokenId: number) => string;
+  getCurrentBackgroundImage: () => string | null; // Helper to get current background image
 }
 
 const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 
-// Sample album data
-const albums: Album[] = [
+// Function to fetch NFT music data from Supabase
+const fetchNFTMusicData = async (): Promise<Album[]> => {
+  try {
+    console.log('Fetching NFT music data from Supabase...');
+    const { data: nfts, error } = await supabase
+      .from('nfts')
+      .select('*')
+      .not('audio_url', 'is', null) // Only get NFTs with audio
+      .eq('status', 'active') // Only active NFTs
+      .order('created_at', { ascending: false })
+      .limit(50); // Limit to 50 most recent
+
+    if (error) {
+      console.error('Error fetching NFTs:', error);
+      // Return fallback albums if there's an error
+      return getFallbackAlbums();
+    }
+
+    console.log(`Found ${nfts?.length || 0} NFTs with audio`);
+
+    if (!nfts || nfts.length === 0) {
+      console.log('No NFTs found, using fallback albums');
+      return getFallbackAlbums();
+    }
+
+    // Convert NFT records to Album format
+    const albums: Album[] = nfts.map((nft: NFTRecord) => {
+      const imageUrl = nft.image_url || (nft.image_cid ? `https://ipfs.io/ipfs/${nft.image_cid}` : '');
+      const audioUrl = nft.audio_url || (nft.audio_cid ? `https://ipfs.io/ipfs/${nft.audio_cid}` : '');
+      
+      return {
+        id: `${nft.contract_address}-${nft.token_id}`,
+        metadataUrl: `https://ipfs.io/ipfs/${nft.metadata_cid}`,
+        nftUrl: `/${nft.creator_address}/${nft.contract_name}/${nft.token_id}`,
+        nftRecord: nft,
+        // Create metadata from NFT record for immediate use
+        metadata: {
+          name: nft.name,
+          description: nft.description || '',
+          image: imageUrl,
+          animation_url: audioUrl,
+          external_url: nft.external_url,
+          attributes: Array.isArray(nft.attributes) ? nft.attributes as Array<{trait_type: string; value: string | number}> : [],
+          properties: {
+            duration: nft.duration_seconds || 240,
+            format: nft.audio_format || 'mp3',
+            file_size: nft.file_size_bytes?.toString() || '0',
+            channels: 2,
+            sample_rate: 44100,
+            title: nft.name,
+            audio_file: audioUrl,
+          },
+          interoperabilityFormats: [],
+          customizationData: {},
+          edition: null,
+          royalties: nft.royalty_percentage || 500,
+          soulbound: false,
+          location: {
+            lat: nft.mint_location_lat || 0,
+            lon: nft.mint_location_lng || 0,
+          },
+        } as NFTMetadata
+      };
+    });
+
+    console.log(`Successfully converted ${albums.length} NFTs to albums`);
+    return albums;
+  } catch (error) {
+    console.error('Error in fetchNFTMusicData:', error);
+    return getFallbackAlbums();
+  }
+};
+
+// Fallback albums when no NFTs are available
+const getFallbackAlbums = (): Album[] => [
   {
     id: '1',
     metadataUrl: 'https://ipfs.io/ipfs/QmQx3XDVeWtXsnoWavLwKfh822mFCLWoQ8FFcrG4cwB6yg',
@@ -96,19 +206,19 @@ const albums: Album[] = [
 
 export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [currentAlbum, setCurrentAlbumState] = useState<Album | null>(albums[0]);
+  const [currentAlbum, setCurrentAlbumState] = useState<Album | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(240);
   const [volume, setVolumeState] = useState(0.7);
   const [isShuffled, setIsShuffled] = useState(false);
   const [isRepeating, setIsRepeating] = useState(false);
-  const [albumsWithMetadata, setAlbumsWithMetadata] = useState<Album[]>(albums);
-  const [isLoading, setIsLoading] = useState(false);
+  const [albumsWithMetadata, setAlbumsWithMetadata] = useState<Album[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Utility function to convert any IPFS gateway URL to ipfs.io
+  // Utility function to convert any IPFS gateway URL to ipfs.io with fallbacks
   const convertToIpfsIo = useCallback((url: string): string => {
     if (!url) return url;
     
@@ -123,12 +233,15 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       const match = url.match(pattern);
       if (match && match[1]) {
         const cid = match[1];
-        console.log(`Converting IPFS URL: ${url} -> https://ipfs.io/ipfs/${cid}`);
-        return `https://ipfs.io/ipfs/${cid}`;
+        // Always use ipfs.io as primary gateway for better reliability
+        const finalUrl = `https://ipfs.io/ipfs/${cid}`;
+        console.log(`Converting IPFS URL: ${url} -> ${finalUrl}`);
+        return finalUrl;
       }
     }
     
     // If no IPFS pattern found, return original URL
+    console.log(`No IPFS pattern found in URL: ${url}`);
     return url;
   }, []);
 
@@ -195,27 +308,74 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   // Load metadata for all albums
   const loadAllMetadata = useCallback(async () => {
+    console.log('Loading all metadata...');
     setIsLoading(true);
     try {
+      // First, fetch NFT data from Supabase
+      const nftAlbums = await fetchNFTMusicData();
+      console.log(`Fetched ${nftAlbums.length} albums from NFT data`);
+      
+      // If we have NFT albums with existing metadata, use them directly
+      if (nftAlbums.length > 0 && nftAlbums.some(album => album.metadata)) {
+        console.log('Using NFT albums with existing metadata');
+        setAlbumsWithMetadata(nftAlbums);
+        
+        // Set current album to first album with metadata
+        const firstAlbumWithMetadata = nftAlbums.find((album: Album) => album.metadata);
+        if (firstAlbumWithMetadata?.metadata) {
+          console.log(`Setting current album to: ${firstAlbumWithMetadata.metadata.name}`);
+          setCurrentAlbumState(firstAlbumWithMetadata);
+          setDuration(firstAlbumWithMetadata.metadata.properties.duration);
+        }
+        return;
+      }
+      
+      // Fallback: load metadata from IPFS if needed
+      console.log('Loading metadata from IPFS for albums without existing metadata');
       const albumsWithLoadedMetadata = await Promise.all(
-        albums.map(async (album) => {
+        nftAlbums.map(async (album: Album) => {
+          // If album already has metadata from NFT record, use it
+          if (album.metadata) {
+            return album;
+          }
+          
+          // Otherwise, fetch from IPFS
+          const metadata = await loadMetadata(album);
+          return { ...album, metadata: metadata || undefined };
+        })
+      );
+      
+      setAlbumsWithMetadata(albumsWithLoadedMetadata);
+      
+      // Set current album to first album with loaded metadata
+      const firstAlbumWithMetadata = albumsWithLoadedMetadata.find((album: Album) => album.metadata);
+      if (firstAlbumWithMetadata?.metadata) {
+        console.log(`Setting current album to: ${firstAlbumWithMetadata.metadata.name}`);
+        setCurrentAlbumState(firstAlbumWithMetadata);
+        setDuration(firstAlbumWithMetadata.metadata.properties.duration);
+      }
+    } catch (error) {
+      console.error('Error loading music data:', error);
+      // On error, try to load fallback albums
+      console.log('Using fallback albums due to error');
+      const fallbackAlbums = getFallbackAlbums();
+      const albumsWithLoadedMetadata = await Promise.all(
+        fallbackAlbums.map(async (album: Album) => {
           const metadata = await loadMetadata(album);
           return { ...album, metadata: metadata || undefined };
         })
       );
       setAlbumsWithMetadata(albumsWithLoadedMetadata);
       
-      // Set current album to first album with loaded metadata
-      const firstAlbumWithMetadata = albumsWithLoadedMetadata.find(album => album.metadata);
+      const firstAlbumWithMetadata = albumsWithLoadedMetadata.find((album: Album) => album.metadata);
       if (firstAlbumWithMetadata?.metadata) {
+        console.log(`Setting fallback current album to: ${firstAlbumWithMetadata.metadata.name}`);
         setCurrentAlbumState(firstAlbumWithMetadata);
         setDuration(firstAlbumWithMetadata.metadata.properties.duration);
-        
-        // Note: Removed image preloading to prevent console warnings
-        // The images will load on-demand when the player is displayed
       }
     } finally {
       setIsLoading(false);
+      console.log('Finished loading metadata');
     }
   }, [loadMetadata]);
 
@@ -383,12 +543,22 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     if (currentAlbum?.nftUrl) {
       router.push(currentAlbum.nftUrl);
     }
-  }, [currentAlbum?.nftUrl, router]);
+  }, [currentAlbum, router]);
 
   // Helper function to create NFT URLs
-  const createNFTUrl = useCallback((contractAddress: string, contractName: string, tokenId: number) => {
-    return `/${contractAddress}/${contractName}/${tokenId}`;
+  const createNFTUrl = useCallback((creatorAddress: string, contractName: string, tokenId: number) => {
+    return `/${creatorAddress}/${contractName}/${tokenId}`;
   }, []);
+
+  // Function to refresh the music queue from Supabase
+  const refreshMusicQueue = useCallback(async () => {
+    await loadAllMetadata();
+  }, [loadAllMetadata]);
+
+  // Helper function to get current background image
+  const getCurrentBackgroundImage = useCallback((): string | null => {
+    return currentAlbum?.metadata?.image || null;
+  }, [currentAlbum?.metadata?.image]);
 
   // Audio event listeners
   useEffect(() => {
@@ -494,7 +664,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setIsRepeating,
     seekTo,
     navigateToCurrentNFT,
+    refreshMusicQueue,
     createNFTUrl,
+    getCurrentBackgroundImage,
   };
 
   return (

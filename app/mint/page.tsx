@@ -85,9 +85,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner"
-import { ChevronDown, Loader2, Plus, X, Lock } from 'lucide-react';
+import { ChevronDown, Loader2, Plus, X, Lock, ImageIcon, Music } from 'lucide-react';
 import Image from 'next/image';
 import { parseBuffer } from 'music-metadata';
+import { saveNFTToDatabase, NFTSaveData } from '@/lib/nftApi';
 
 // Dynamic import to avoid SSR issues with Leaflet
 const LocationMapModal = dynamic(() => import('@/components/LocationMapModal'), {
@@ -131,33 +132,21 @@ export default function MintPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [externalUrl, setExternalUrl] = useState<string>('https://sumak.app');
-  const [attributes, setAttributes] = useState<string>('{"genre": "electronic", "rarity": "Rare"}');
-  const [interoperabilityFormats, setInteroperabilityFormats] = useState<string>('mp3');
+  const [externalUrl, setExternalUrl] = useState<string>('');
+  const [attributes, setAttributes] = useState<string>('');
+  const [interoperabilityFormats, setInteroperabilityFormats] = useState<string>('');
   
   // Available format options
   const availableFormats = ['mp3', 'wav', 'flac', 'aac'];
-  const [customizationData, setCustomizationData] = useState<string>('{"tempo": "120 BPM", "key": "C major"}');
-  const [edition, setEdition] = useState<string>('100');
-  const [royalties, setRoyalties] = useState<string>('10%');
-  const [properties, setProperties] = useState<string>('{"duration": "3:45", "bitrate": "320kbps"}');
+  const [customizationData, setCustomizationData] = useState<string>('');
+  const [edition, setEdition] = useState<string>('');
+  const [royalties, setRoyalties] = useState<string>('');
+  const [properties, setProperties] = useState<string>('');
   
-  // Helper states for better UX - Audio-specific defaults
-  const [attributesList, setAttributesList] = useState<Array<{key: string, value: string}>>([
-    {key: 'genre', value: 'electronic'},
-    {key: 'mood', value: 'energetic'},
-    {key: 'rarity', value: 'Rare'}
-  ]);
-  const [propertiesList, setPropertiesList] = useState<Array<{key: string, value: string}>>([
-    {key: 'duration', value: '180'},
-    {key: 'bitrate', value: '320kbps'},
-    {key: 'sample_rate', value: '44100'}
-  ]);
-  const [customizationList, setCustomizationList] = useState<Array<{key: string, value: string}>>([
-    {key: 'tempo', value: '120'},
-    {key: 'key', value: 'C'},
-    {key: 'instruments', value: 'synthesizer, drums'}
-  ]);
+  // Helper states for better UX - start with empty arrays
+  const [attributesList, setAttributesList] = useState<Array<{key: string, value: string}>>([]);
+  const [propertiesList, setPropertiesList] = useState<Array<{key: string, value: string}>>([]);
+  const [customizationList, setCustomizationList] = useState<Array<{key: string, value: string}>>([]);
 
   // Helper functions to sync list states with JSON strings
   const updateAttributesFromList = (list: Array<{key: string, value: string}>) => {
@@ -254,8 +243,8 @@ export default function MintPage() {
   };
 
   // Separate latitude and longitude states
-  const [latitude, setLatitude] = useState<string>('-12.72596');
-  const [longitude, setLongitude] = useState<string>('-77.89962');
+  const [latitude, setLatitude] = useState<string>('');
+  const [longitude, setLongitude] = useState<string>('');
   const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
   const [minting, setMinting] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -363,12 +352,21 @@ export default function MintPage() {
     }
     
     if (file) {
-      // Add file size validation (100MB for audio files)
-      if (file.size > 100 * 1024 * 1024) {
-        setError("El tamaño del archivo debe ser menor a 100MB");
+      // Display current file size for user reference
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      console.log(`Selected audio file: ${file.name}, Size: ${fileSizeMB}MB`);
+      
+      // Add file size validation (50MB for audio files to ensure server compatibility)
+      if (file.size > 50 * 1024 * 1024) {
+        setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 50MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
         setAudioFile(null);
         setAudioPreviewUrl(null);
         return;
+      }
+      
+      // Warn if file is getting close to the limit (above 40MB)
+      if (file.size > 40 * 1024 * 1024) {
+        console.warn(`File size warning: ${fileSizeMB}MB is close to the 50MB limit`);
       }
       
       // Validate file type for audio with MIME type and extension validation
@@ -633,8 +631,8 @@ export default function MintPage() {
       if (!validExtensions.includes(fileExtension)) {
         errors.audioFile = 'Tipo de archivo inválido. Por favor sube archivos de audio .mp3, .wav, .flac, .aac, .m4a, o .ogg';
       }
-      if (audioFile.size > 100 * 1024 * 1024) {
-        errors.audioFile = 'El tamaño del archivo debe ser menor a 100MB';
+      if (audioFile.size > 50 * 1024 * 1024) {
+        errors.audioFile = 'El tamaño del archivo debe ser menor a 50MB para garantizar compatibilidad con el servidor';
       }
     }
     
@@ -648,42 +646,52 @@ export default function MintPage() {
     }
     
     // Validate JSON fields with better error messages
-    try {
-      const parsedAttributes = JSON.parse(attributes);
-      if (typeof parsedAttributes !== 'object' || Array.isArray(parsedAttributes)) {
-        errors.attributes = 'Attributes must be a valid JSON object';
+    if (attributes.trim()) {
+      try {
+        const parsedAttributes = JSON.parse(attributes);
+        if (typeof parsedAttributes !== 'object' || Array.isArray(parsedAttributes)) {
+          errors.attributes = 'Attributes must be a valid JSON object';
+        }
+      } catch {
+        errors.attributes = 'Invalid JSON format in attributes field';
       }
-    } catch {
-      errors.attributes = 'Invalid JSON format in attributes field';
     }
     
-    try {
-      const parsedCustomization = JSON.parse(customizationData);
-      if (typeof parsedCustomization !== 'object' || Array.isArray(parsedCustomization)) {
-        errors.customizationData = 'Customization data must be a valid JSON object';
+    if (customizationData.trim()) {
+      try {
+        const parsedCustomization = JSON.parse(customizationData);
+        if (typeof parsedCustomization !== 'object' || Array.isArray(parsedCustomization)) {
+          errors.customizationData = 'Customization data must be a valid JSON object';
+        }
+      } catch {
+        errors.customizationData = 'Invalid JSON format in customization data field';
       }
-    } catch {
-      errors.customizationData = 'Invalid JSON format in customization data field';
     }
     
-    try {
-      const parsedProperties = JSON.parse(properties);
-      if (typeof parsedProperties !== 'object' || Array.isArray(parsedProperties)) {
-        errors.properties = 'Properties must be a valid JSON object';
-      } else {
-        // Audio-specific validation for properties
-        if (parsedProperties.duration && (typeof parsedProperties.duration !== 'number' || parsedProperties.duration <= 0)) {
-          errors.properties = 'Duration must be a positive number in seconds';
+    if (properties.trim()) {
+      try {
+        const parsedProperties = JSON.parse(properties);
+        if (typeof parsedProperties !== 'object' || Array.isArray(parsedProperties)) {
+          errors.properties = 'Properties must be a valid JSON object';
+        } else {
+          // Audio-specific validation for properties
+          if (parsedProperties.duration && (typeof parsedProperties.duration !== 'number' || parsedProperties.duration <= 0)) {
+            errors.properties = 'Duration must be a positive number in seconds';
+          }
+          if (parsedProperties.bitrate && typeof parsedProperties.bitrate === 'string') {
+            // Allow various bitrate formats: "320", "320kbps", "1.5mbps", "128 kbps", etc.
+            const bitratePattern = /^\d+(\.\d+)?\s?(kbps|Kbps|KBPS|mbps|Mbps|MBPS|kb\/s|Kb\/s|KB\/s|mb\/s|Mb\/s|MB\/s)?$/i;
+            if (!parsedProperties.bitrate.match(bitratePattern)) {
+              errors.properties = 'Bitrate must be a number with optional unit (e.g., "128", "320kbps", "1.5mbps", "256 kb/s")';
+            }
+          }
+          if (parsedProperties.sample_rate && (typeof parsedProperties.sample_rate !== 'number' || parsedProperties.sample_rate < 8000)) {
+            errors.properties = 'Sample rate must be a number >= 8000 Hz';
+          }
         }
-        if (parsedProperties.bitrate && typeof parsedProperties.bitrate === 'string' && !parsedProperties.bitrate.match(/^\d+\s?(kbps|Kbps|KBPS)?$/)) {
-          errors.properties = 'Bitrate must be in format "320kbps" or "320"';
-        }
-        if (parsedProperties.sample_rate && (typeof parsedProperties.sample_rate !== 'number' || parsedProperties.sample_rate < 8000)) {
-          errors.properties = 'Sample rate must be a number >= 8000 Hz';
-        }
+      } catch {
+        errors.properties = 'Invalid JSON format in properties field';
       }
-    } catch {
-      errors.properties = 'Invalid JSON format in properties field';
     }
     
     // Validate audio format
@@ -727,7 +735,7 @@ export default function MintPage() {
     }
     
     setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+    return { isValid: Object.keys(errors).length === 0, errors };
   };
 
   const uploadWithProgress = async (formData: FormData) => {
@@ -1188,8 +1196,15 @@ export default function MintPage() {
     }
 
     // Validate form
-    if (!validateForm()) {
-      setError('Por favor corrige los errores de validación antes de continuar.');
+    const validationResult = validateForm();
+    if (!validationResult.isValid) {
+      // Get the first validation error to show in the main error message
+      const errorMessages = Object.values(validationResult.errors);
+      if (errorMessages.length > 0) {
+        setError(`Error de validación: ${errorMessages[0]}`);
+      } else {
+        setError('Por favor corrige los errores de validación antes de continuar.');
+      }
       return;
     }
 
@@ -1197,12 +1212,17 @@ export default function MintPage() {
     const preflightErrors = performPreflightChecks();
     if (Object.keys(preflightErrors).length > 0) {
       setValidationErrors(prev => ({ ...prev, ...preflightErrors }));
-      setError('Por favor resuelve los problemas arriba antes de continuar.');
+      const firstPreflightError = Object.values(preflightErrors)[0];
+      setError(`Error: ${firstPreflightError}`);
       return;
     }
 
     setMinting(true);
     setLoadingState('uploading');
+
+    // Clear validation errors since validation passed
+    setValidationErrors({});
+    setError('');
 
     try {
       // Step 1: Upload to IPFS with progress
@@ -1303,7 +1323,9 @@ export default function MintPage() {
       try {
         metadataResponse = await uploadWithProgress(formData);
       } catch (uploadError: unknown) {
-        // Special handling for 413 errors
+        console.error('Upload error details:', uploadError);
+        
+        // Handle different types of upload errors
         if (
           typeof uploadError === 'object' &&
           uploadError !== null &&
@@ -1311,16 +1333,29 @@ export default function MintPage() {
           typeof (uploadError as { message: string }).message === 'string'
         ) {
           const message = (uploadError as { message: string }).message;
+          
           if (message.includes('413') || message.toLowerCase().includes('too large')) {
-            setError('Falló la subida del archivo: El archivo es demasiado grande para que el servidor lo acepte. Por favor asegúrate de que tu archivo esté bien por debajo de 300MB. Si este error persiste para archivos pequeños, contacta soporte.');
-            toast.error('File upload failed: The file is too large for the server to accept.');
+            setError(`Falló la subida del archivo: El archivo es demasiado grande para que el servidor lo acepte. Archivo actual: ${((audioFile?.size || 0) / 1024 / 1024).toFixed(2)}MB. Límite: 50MB.`);
+            toast.error('File upload failed: File too large for server.');
+          } else if (message.toLowerCase().includes('timeout')) {
+            setError('Falló la subida del archivo: Tiempo de espera agotado. Tu archivo puede ser muy grande o la conexión es lenta. Intenta con un archivo más pequeño.');
+            toast.error('Upload timeout. Try a smaller file.');
+          } else if (message.toLowerCase().includes('rate limit') || message.includes('429')) {
+            setError('Falló la subida del archivo: Demasiadas solicitudes de subida. Por favor espera unos minutos e intenta de nuevo.');
+            toast.error('Rate limit exceeded. Please wait and try again.');
+          } else if (message.toLowerCase().includes('authentication') || message.includes('401')) {
+            setError('Falló la subida del archivo: Error de autenticación con el servicio de almacenamiento. Por favor contacta soporte.');
+            toast.error('Authentication error with storage service.');
+          } else if (message.toLowerCase().includes('connect') || message.toLowerCase().includes('network')) {
+            setError('Falló la subida del archivo: No se pudo conectar al servicio de almacenamiento. Verifica tu conexión a internet e intenta de nuevo.');
+            toast.error('Cannot connect to storage service. Check your internet connection.');
           } else {
-            setError(message || 'Falló la subida del archivo.');
+            setError(`Falló la subida del archivo: ${message}`);
             toast.error(message || 'File upload failed.');
           }
         } else {
-          setError('Falló la subida del archivo.');
-          toast.error('File upload failed.');
+          setError('Falló la subida del archivo: Error desconocido.');
+          toast.error('File upload failed with unknown error.');
         }
         setMinting(false);
         setDeployingContract(false);
@@ -1373,13 +1408,61 @@ export default function MintPage() {
       setLoadingState('minted');
       setContractDeploymentStep('¡Contrato implementado exitosamente!');
 
-      toast.success('¡Contrato NFT implementado exitosamente! Redirigiendo...');
+      toast.success('¡Contrato NFT implementado exitosamente!');
+
+      // Save NFT metadata to database
+      try {
+        setContractDeploymentStep('Guardando metadatos del NFT...');
+        
+        const nftData: NFTSaveData = {
+          tokenId: 1, // First token in contract
+          contractAddress: deployResult.contractAddress,
+          contractName: deployResult.contractName || deployData.mintName,
+          creatorAddress: effectiveAddress!,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          artist: artist.trim() || undefined,
+          imageUrl: responseData.imageUrl,
+          imageCid: responseData.imageCid,
+          audioUrl: responseData.audioUrl,
+          audioCid: responseData.audioCid,
+          externalUrl: externalUrl.trim() || undefined,
+          audioFormat: responseData.audioFormat || audioFile?.type.split('/')[1],
+          durationSeconds: responseData.durationSeconds,
+          fileSizeBytes: responseData.fileSizeBytes || audioFile?.size,
+          metadataCid: sanitizedCid,
+          royaltyPercentage: parseFloat(royalties.replace('%', '')) * 100 || 500, // Convert to basis points
+          attributes: responseData.attributes || (attributes ? JSON.parse(attributes) : undefined),
+          mintTxId: deployResult.txid || '',
+          mintLocationLat: parseFloat(latitude) || undefined,
+          mintLocationLng: parseFloat(longitude) || undefined,
+        };
+
+        const saveResult = await saveNFTToDatabase(nftData);
+        
+        if (saveResult.success) {
+          console.log('NFT metadata saved successfully:', saveResult.data);
+          setContractDeploymentStep('¡NFT guardado exitosamente en la base de datos!');
+        } else {
+          console.error('Failed to save NFT metadata:', saveResult.error);
+          // Don't fail the entire process if database save fails
+          setContractDeploymentStep('¡Contrato implementado! (Advertencia: Error al guardar metadatos)');
+        }
+      } catch (error) {
+        console.error('Error saving NFT metadata:', error);
+        // Don't fail the entire process if database save fails
+        setContractDeploymentStep('¡Contrato implementado! (Advertencia: Error al guardar metadatos)');
+      }
 
       // Redirect using contractAddress and contractName
-  // Redirect to NFT detail page, defaulting to tokenId 1 if not present
-  const tokenId = responseData.tokenId || responseData.token_id || responseData.id || 1;
-  const redirectPath = `/${deployResult.contractAddress}/${deployResult.contractName}/${tokenId}`;
-  router.push(redirectPath);
+      // Redirect to NFT detail page, defaulting to tokenId 1 if not present
+      const tokenId = responseData.tokenId || responseData.token_id || responseData.id || 1;
+      const redirectPath = `/${deployResult.contractAddress}/${deployResult.contractName}/${tokenId}`;
+      
+      // Wait a bit to show the success message
+      setTimeout(() => {
+        router.push(redirectPath);
+      }, 2000);
 
     } catch (error) {
       console.error('Minting error:', error);
@@ -1411,7 +1494,7 @@ export default function MintPage() {
           errorSuggestion = 'Por favor verifica todos los campos para entrada válida e intenta de nuevo.';
         } else if (error.message.includes('file') || error.message.includes('size')) {
           errorMessage = 'Error de subida de archivo.';
-          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 100MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
+          errorSuggestion = 'Por favor asegúrate de que tu archivo esté por debajo de 50MB y en un formato de audio soportado (.mp3, .wav, .flac, .aac, .m4a, .ogg).';
         } else {
           errorMessage = error.message;
           errorSuggestion = 'Si este problema persiste, por favor contacta soporte.';
@@ -1528,6 +1611,9 @@ export default function MintPage() {
             <div className="h-[50vh] md:h-[60vh] lg:h-[72vh] min-h-[400px]">
               {!audioFile ? (
                 <div className="flex flex-col h-full items-center justify-center border-1 border-dashed border-[#333] rounded-lg p-4">
+                  <div className="mb-4">
+                    <Music className="w-12 h-12 text-gray-500 mx-auto" />
+                  </div>
                  <Label htmlFor="audioFile" className="text-[#777] mb-2 text-center">
                     Arrastra y suelta archivos de audio aquí o haz clic para subir
                   </Label>
@@ -1546,12 +1632,16 @@ export default function MintPage() {
                   </label>
                   <div className='text-center text-sm'>
                     <p className="text-[#777] mt-2">
-                      Tamaño Máximo: 100MB
+                      Tamaño Máximo: 50MB
                       <br/>
                       .mp3, .wav, .flac, .aac, .m4a, .ogg
                       <br/>
                       <span className="text-purple-400 text-xs">
                         ✨ Cover art y metadatos extraídos automáticamente
+                      </span>
+                      <br/>
+                      <span className="text-blue-400 text-xs">
+                        💡 Tip: Para archivos grandes, usa 192-256kbps
                       </span>
                     </p>
                   </div>
@@ -1597,6 +1687,18 @@ export default function MintPage() {
                       >
                         Tu navegador no soporta el elemento de audio.
                       </audio>
+                      {/* File information */}
+                      {audioFile && (
+                        <div className="mt-3 text-center">
+                          <p className="text-gray-300 text-xs mb-1">{audioFile.name}</p>
+                          <p className="text-gray-400 text-xs">
+                            Tamaño: {((audioFile.size || 0) / (1024 * 1024)).toFixed(2)} MB
+                            {audioFile.size > 40 * 1024 * 1024 && (
+                              <span className="text-yellow-400 ml-2">⚠️ Archivo grande</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -1640,12 +1742,6 @@ export default function MintPage() {
                   background: #6B7280;
                 }
               `}</style>
-
-            {error && (
-              <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
 
             
             {loadingState !== 'idle' && (
@@ -1730,7 +1826,7 @@ export default function MintPage() {
                 maxLength={23}
               />
               {validationErrors.name && (
-                <p className="text-red-400 text-xs mt-1">{validationErrors.name}</p>
+                <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.name}</p>
               )}
               <p className="text-[#555] text-right text-xs m-1">
                 {name.length}/23 characters
@@ -1754,7 +1850,7 @@ export default function MintPage() {
                 maxLength={100}
               />
               {validationErrors.artist && (
-                <p className="text-red-400 text-xs mt-1">{validationErrors.artist}</p>
+                <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.artist}</p>
               )}
               <p className="text-[#555] text-right text-xs m-1">
                 {artist.length}/100 characters
@@ -1773,10 +1869,10 @@ export default function MintPage() {
                   }
                 }}
                 placeholder="Descripción"
-                className={`border-[#333] p-6 text-lg min-h-[210px] ${validationErrors.description ? 'border-red-500' : ''}`}
+                className={`border-[#333] p-6 text-lg min-h-[144px] ${validationErrors.description ? 'border-red-500' : ''}`}
               />
               {validationErrors.description && (
-                <p className="text-red-400 text-xs mt-1">{validationErrors.description}</p>
+                <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.description}</p>
               )}
               <p className="text-[#555] text-xs text-right mt-1">
                 {description.length}/500 characters
@@ -1786,9 +1882,73 @@ export default function MintPage() {
             {/* Audio file validation error */}
             {validationErrors.audioFile && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                <p className="text-red-600 dark:text-red-400 text-sm">{validationErrors.audioFile}</p>
+                <p className="text-red-600 dark:text-red-400 text-sm select-text">{validationErrors.audioFile}</p>
               </div>
             )}
+
+            {/* Cover Image Upload - Square Layout */}
+            <div>
+              <Label htmlFor="imageFile" className='mb-2'>Imagen de Portada</Label>
+              <div className="flex gap-4 items-start">
+                {/* Square preview area */}
+                <div className="w-32 h-32 flex-shrink-0">
+                  {imagePreviewUrl ? (
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={imagePreviewUrl}
+                        alt="Cover image preview"
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover rounded-lg border border-[#555]"
+                        unoptimized={true}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (imagePreviewUrl) {
+                            URL.revokeObjectURL(imagePreviewUrl);
+                          }
+                          setImageFile(null);
+                          setImagePreviewUrl(null);
+                          // Reset the file input
+                          const fileInput = document.getElementById('imageFile') as HTMLInputElement;
+                          if (fileInput) fileInput.value = '';
+                        }}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <ImageIcon className="w-8 h-8 text-gray-500 mx-auto mb-1" />
+                        <p className="text-xs text-gray-500">Square Cover</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Upload controls */}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    id="imageFile"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    className='border-[#333] cursor-pointer mb-2'
+                  />
+                  <p className="text-gray-400 text-xs">
+                    Formatos soportados: JPEG, PNG, GIF, WebP. Máximo: 10MB
+                  </p>
+                  {imageFile && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {imageFile.name} ({((imageFile.size || 0) / (1024 * 1024)).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className='flex w-full'>
               <Button 
@@ -1799,55 +1959,6 @@ export default function MintPage() {
             </div>
             {showAdvancedOptions && (
               <div className="space-y-4">
-                <div>
-                  <Label htmlFor="imageFile" className='mb-2'>Subir Imagen de Portada</Label>
-                  <Input
-                    type="file"
-                    id="imageFile"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className='border-[#333] cursor-pointer'
-                  />
-                  {imagePreviewUrl && (
-                    <div className="mt-3 p-3 bg-background border border-[#333] rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">Preview:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (imagePreviewUrl) {
-                              URL.revokeObjectURL(imagePreviewUrl);
-                            }
-                            setImageFile(null);
-                            setImagePreviewUrl(null);
-                            // Reset the file input
-                            const fileInput = document.getElementById('imageFile') as HTMLInputElement;
-                            if (fileInput) fileInput.value = '';
-                          }}
-                          className="text-xs text-red-400 hover:text-red-300 cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      <div className="relative w-full">
-                        <Image
-                          src={imagePreviewUrl}
-                          alt="Cover image preview"
-                          width={400}
-                          height={300}
-                          className="w-full h-auto max-h-48 object-contain rounded border border-[#555]"
-                          unoptimized={true}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2 text-center">
-                        {imageFile?.name} ({((imageFile?.size || 0) / (1024 * 1024)).toFixed(2)} MB)
-                      </p>
-                    </div>
-                  )}
-                  <p className="text-gray-400 text-xs mt-1">
-                    Supported formats: JPEG, PNG, GIF, WebP. Max size: 10MB
-                  </p>
-                </div>
                 <div>
                   <Label htmlFor="externalUrl" className='my-2'>External URL</Label>
                   <Input
@@ -1923,7 +2034,7 @@ export default function MintPage() {
                     Formato del archivo de audio subido. Debe coincidir con el archivo.
                   </p>
                   {validationErrors.interoperabilityFormats && (
-                    <p className="text-red-400 text-xs mt-1">{validationErrors.interoperabilityFormats}</p>
+                    <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.interoperabilityFormats}</p>
                   )}
                 </div>
 
@@ -1987,7 +2098,7 @@ export default function MintPage() {
                     className={`border-[#333] hide-number-spinners ${validationErrors.edition ? 'border-red-500' : ''}`}
                   />
                   {validationErrors.edition && (
-                    <p className="text-red-400 text-xs mt-1">{validationErrors.edition}</p>
+                    <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.edition}</p>
                   )}
                   <p className="text-gray-400 text-xs mt-1">
                     Maximum 10,000 editions to ensure optimal contract performance
@@ -2085,7 +2196,7 @@ export default function MintPage() {
                           />
                         </div>
                         {validationErrors.latitude && (
-                          <p className="text-red-400 text-xs mt-1">{validationErrors.latitude}</p>
+                          <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.latitude}</p>
                         )}
                       </div>
                       <div className="flex-1">
@@ -2115,12 +2226,12 @@ export default function MintPage() {
                           />
                         </div>
                         {validationErrors.longitude && (
-                          <p className="text-red-400 text-xs mt-1">{validationErrors.longitude}</p>
+                          <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.longitude}</p>
                         )}
                       </div>
                     </div>
                     {validationErrors.location && (
-                      <p className="text-red-400 text-xs">{validationErrors.location}</p>
+                      <p className="text-red-400 text-xs select-text">{validationErrors.location}</p>
                     )}
                     <Button
                       type="button"
@@ -2175,6 +2286,31 @@ export default function MintPage() {
               )}
             </div>
 
+            {/* Error messages section - placed after MINT button */}
+            {error && (
+              <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+                <p className="text-red-400 text-sm select-text">{error}</p>
+              </div>
+            )}
+
+            {/* Validation errors summary */}
+            {Object.keys(validationErrors).length > 0 && (
+              <div className="p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg select-text">
+                <p className="text-yellow-400 text-sm font-medium mb-2">Errores de validación:</p>
+                <ul className="text-yellow-300 text-xs space-y-1">
+                  {Object.entries(validationErrors).map(([field, error]) => (
+                    <li key={field} className="flex items-start">
+                      <span className="text-yellow-500 mr-1">•</span>
+                      <span className="capitalize">{field === 'audioFile' ? 'Archivo de audio' : 
+                                                     field === 'externalUrl' ? 'URL externa' : 
+                                                     field === 'interoperabilityFormats' ? 'Formato de audio' : 
+                                                     field}</span>: {error}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Balance display */}
             {effectiveAddress && (
               <div className="px-3 bg-background text-foreground">
@@ -2190,14 +2326,14 @@ export default function MintPage() {
                 </div>
                 {isSessionLocked && (
                   <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded">
-                    <p className="text-yellow-400 text-xs flex items-center gap-1">
+                    <p className="text-yellow-400 text-xs flex items-center gap-1 select-text">
                       <Lock className="h-3 w-3" />
                       Session locked. Please unlock your wallet to continue minting.
                     </p>
                   </div>
                 )}
                 {sbtcBalance !== null && sbtcBalance < 100 && (
-                  <p className="text-red-400 text-xs mt-1">
+                  <p className="text-red-400 text-xs mt-1 select-text">
                     Low balance! You may need more sBTC for transaction fees.
                   </p>
                 )}
@@ -2205,9 +2341,9 @@ export default function MintPage() {
             )}
             {lastTxId && (
               <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
-                <p className="text-green-400 text-sm mb-2">¡Contrato implementado exitosamente!</p>
-                <p className="text-gray-300 text-xs">
-                  Transaction ID: <code className="bg-gray-800 px-2 py-1 rounded text-xs break-all">{lastTxId}</code>
+                <p className="text-green-400 text-sm mb-2 select-text">¡Contrato implementado exitosamente!</p>
+                <p className="text-gray-300 text-xs select-text">
+                  Transaction ID: <code className="bg-gray-800 px-2 py-1 rounded text-xs break-all select-text">{lastTxId}</code>
                 </p>
               </div>
             )}

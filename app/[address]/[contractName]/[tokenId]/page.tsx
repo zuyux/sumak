@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
+import { supabase } from '@/lib/supabaseClient';
 // import { getProfile } from '@/lib/profileApi';
 // Temporarily removed import: import { getNftsByCreator } from '@/lib/nftApi';
 
@@ -130,30 +131,39 @@ export default function NFTDetailPage() {
     
     try {
       setIsLoading(true);
-      const network = process.env.NEXT_PUBLIC_STACKS_NETWORK === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
       
-      const result = await fetchCallReadOnlyFunction({
-        contractAddress: address,
-        contractName: contractName,
-        functionName: 'get-listing-in-sat',
-        functionArgs: [uintCV(parseInt(tokenId))],
-        senderAddress: address,
-        network: network,
-      });
+      // Check listing status from database instead of contract
+      const { data, error } = await supabase
+        .from('nfts')
+        .select('is_listed, list_price, list_currency')
+        .eq('contract_address', address)
+        .eq('contract_name', contractName)
+        .eq('token_id', parseInt(tokenId))
+        .single();
       
-      const jsonResult = cvToJSON(result);
-      console.log('Listing check result:', jsonResult);
+      if (error) {
+        console.warn('Could not fetch listing status from database:', error);
+        setIsListed(false);
+        setListingPrice(null);
+        return;
+      }
       
-      if (jsonResult.success && jsonResult.value) {
-        setIsListed(true);
-        setListingPrice(parseInt(jsonResult.value.price?.value || '0'));
+      if (data) {
+        setIsListed(data.is_listed || false);
+        setListingPrice(data.list_price || null);
+        console.log('Listing status from database:', { 
+          isListed: data.is_listed, 
+          price: data.list_price,
+          currency: data.list_currency 
+        });
       } else {
         setIsListed(false);
         setListingPrice(null);
       }
     } catch (error) {
-      console.error('Error checking listing:', error);
+      console.error('Error checking listing status:', error);
       setIsListed(false);
+      setListingPrice(null);
     } finally {
       setIsLoading(false);
     }
@@ -311,30 +321,25 @@ export default function NFTDetailPage() {
         }
       }
 
-      // Fallback to direct fetching if API fails
+      // Check price from database
+      const { data: nftData } = await supabase
+        .from('nfts')
+        .select('is_listed, list_price, list_currency')
+        .eq('contract_address', address)
+        .eq('contract_name', contractName)
+        .eq('token_id', parseInt(tokenId))
+        .single();
+
+      // Fallback to default pricing if needed
       const stxPriceUsd = await fetchStxPrice();
       let nftPriceStx = 5; // Default fallback price
 
-      // Try to fetch actual price from marketplace contract directly
-      try {
-        const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
-        const network = networkEnv === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
-
-        const priceCV = await fetchCallReadOnlyFunction({
-          contractAddress: address,
-          contractName,
-          functionName: 'get-listing-price',
-          functionArgs: [uintCV(parseInt(tokenId))],
-          network,
-          senderAddress: address,
-        });
-
-        const priceJson = cvToJSON(priceCV);
-        if (priceJson.value && typeof priceJson.value === 'number') {
-          nftPriceStx = priceJson.value / SATOSHIS_PER_STX;
-        }
-      } catch {
-        console.log('No marketplace price found, using default');
+      // Use database price if available
+      if (nftData?.is_listed && nftData.list_price) {
+        nftPriceStx = nftData.list_price / SATOSHIS_PER_STX;
+        console.log('Using database price:', nftData.list_price, 'satoshis');
+      } else {
+        console.log('No database price found, using default');
       }
 
       const priceSatoshis = nftPriceStx * SATOSHIS_PER_STX;
@@ -1327,7 +1332,7 @@ export default function NFTDetailPage() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {creatorNfts.map((nft) => (
-                <Link key={String(nft.id ?? nft.token_id)} href={`/${nft.contract_address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center relative overflow-hidden">
+                <Link key={String(nft.id ?? nft.token_id)} href={`/${nft.creator_address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center relative overflow-hidden">
                   {nft.image ? (
                     <Image 
                       src={nft.image} 

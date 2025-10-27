@@ -30,37 +30,49 @@ export default function PersistentPlayer() {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [localVolume, setLocalVolume] = useState(volume);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
 
   // Helper functions to extract metadata from new structure
-  const getAttributeValue = (metadata: unknown, traitType: string): string => {
+  const getAttributeValue = useCallback((metadata: unknown, traitType: string): string => {
     const metadataObj = metadata as { attributes?: Array<{ trait_type: string; value: string | number }> };
     const attribute = metadataObj?.attributes?.find((attr) => attr.trait_type === traitType);
     return attribute?.value?.toString() || '';
-  };
+  }, []);
 
-  const getTitle = (metadata: unknown): string => {
+  const getTitle = useCallback((metadata: unknown): string => {
     const metadataObj = metadata as { properties?: { title?: string }; name?: string };
     return metadataObj?.properties?.title || metadataObj?.name || 'Unknown Title';
-  };
+  }, []);
 
-  const getArtist = (metadata: unknown): string => {
+  const getArtist = useCallback((metadata: unknown): string => {
     return getAttributeValue(metadata, 'Artist') || 'Unknown Artist';
-  };
+  }, [getAttributeValue]);
 
-  const getGenre = (metadata: unknown): string => {
+  const getGenre = useCallback((metadata: unknown): string => {
     return getAttributeValue(metadata, 'genre') || 'Unknown Genre';
-  };
+  }, [getAttributeValue]);
 
-  const getYear = (metadata: unknown): string => {
+  const getYear = useCallback((metadata: unknown): string => {
     return getAttributeValue(metadata, 'year') || '';
-  };
+  }, [getAttributeValue]);
 
   // Sync local volume with global volume
   useEffect(() => {
     setLocalVolume(volume);
   }, [volume]);
+
+  // Log background image changes for debugging
+  useEffect(() => {
+    if (currentAlbum?.metadata?.image) {
+      console.log('Background image updated for track:', {
+        title: getTitle(currentAlbum.metadata),
+        artist: getArtist(currentAlbum.metadata),
+        image: currentAlbum.metadata.image
+      });
+    }
+  }, [currentAlbum?.metadata?.image, currentAlbum?.metadata, getTitle, getArtist]);
 
   // Format time from seconds to mm:ss
   const formatTime = (time: number) => {
@@ -68,6 +80,23 @@ export default function PersistentPlayer() {
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  // Enhanced track navigation with background update feedback
+  const handleNextTrack = useCallback(() => {
+    setIsTransitioning(true);
+    console.log('🎵 Navigating to next track - background will update');
+    nextTrack();
+    // Reset transition state after a short delay
+    setTimeout(() => setIsTransitioning(false), 300);
+  }, [nextTrack]);
+
+  const handlePreviousTrack = useCallback(() => {
+    setIsTransitioning(true);
+    console.log('🎵 Navigating to previous track - background will update');
+    previousTrack();
+    // Reset transition state after a short delay
+    setTimeout(() => setIsTransitioning(false), 300);
+  }, [previousTrack]);
 
   // Visualizer animation function
   const drawVisualizer = useCallback(() => {
@@ -155,11 +184,15 @@ export default function PersistentPlayer() {
         <div className="grid grid-cols-3 items-center px-0 py-0 h-20 gap-4">
           {/* Left section - Song info (1/3 width) */}
           <div 
-            className="flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-colors"
+            className={`flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-all duration-300 ${
+              isTransitioning ? 'scale-105 bg-primary/10' : ''
+            }`}
             onClick={navigateToCurrentNFT}
             title="View NFT details"
           >
-            <div className="w-20 h-20 relative rounded overflow-hidden flex-shrink-0">
+            <div className={`w-20 h-20 relative rounded overflow-hidden flex-shrink-0 transition-all duration-300 ${
+              isTransitioning ? 'ring-2 ring-primary/50' : ''
+            }`}>
               <Image
                 src={currentAlbum.metadata.image}
                 alt={getTitle(currentAlbum.metadata)}
@@ -174,6 +207,11 @@ export default function PersistentPlayer() {
               <p className="text-xs text-muted-foreground truncate">
                 {getArtist(currentAlbum.metadata)}
               </p>
+              {isTransitioning && (
+                <p className="text-xs text-primary animate-pulse">
+                  🎨 Background updating...
+                </p>
+              )}
             </div>
           </div>
 
@@ -181,8 +219,11 @@ export default function PersistentPlayer() {
           <div className="flex flex-col items-center space-y-2">
             <div className="flex items-center space-x-4">
               <button
-                onClick={previousTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={handlePreviousTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Previous track (will update background)"
               >
                 <SkipBack size={16} />
               </button>
@@ -195,8 +236,11 @@ export default function PersistentPlayer() {
               </button>
               
               <button
-                onClick={nextTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={handleNextTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Next track (will update background)"
               >
                 <SkipForward size={16} />
               </button>
@@ -312,8 +356,11 @@ export default function PersistentPlayer() {
             {/* Center - Main controls */}
             <div className="flex items-center justify-center space-x-4">
               <button
-                onClick={previousTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={handlePreviousTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Previous track (will update background)"
               >
                 <SkipBack size={24} />
               </button>
@@ -326,8 +373,11 @@ export default function PersistentPlayer() {
               </button>
               
               <button
-                onClick={nextTrack}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={handleNextTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Next track (will update background)"
               >
                 <SkipForward size={24} />
               </button>

@@ -1,4 +1,30 @@
 import { supabase } from '@/lib/supabaseClient';
+import axios from 'axios';
+
+export interface NFTSaveData {
+  tokenId: number;
+  contractAddress: string;
+  contractName: string;
+  creatorAddress: string;
+  name: string;
+  description?: string;
+  artist?: string;
+  imageUrl?: string;
+  imageCid?: string;
+  audioUrl?: string;
+  audioCid?: string;
+  externalUrl?: string;
+  audioFormat?: string;
+  durationSeconds?: number;
+  fileSizeBytes?: number;
+  metadataCid: string;
+  royaltyPercentage?: number;
+  attributes?: Record<string, unknown>;
+  mintTxId: string;
+  blockHeight?: number;
+  mintLocationLat?: number;
+  mintLocationLng?: number;
+}
 
 export async function getNftsByCreator(address: string) {
   try {
@@ -6,7 +32,7 @@ export async function getNftsByCreator(address: string) {
     const { data, error } = await supabase
       .from('nfts')
       .select('*')
-      .eq('creator', address)
+      .eq('creator_address', address)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -23,6 +49,73 @@ export async function getNftsByCreator(address: string) {
     console.error('Error fetching NFTs by creator:', error);
     // Return empty array instead of throwing to prevent page crashes
     return [];
+  }
+}
+
+// New function to save NFT data after successful minting using API route
+export async function saveNFTToDatabase(nftData: NFTSaveData): Promise<{
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: string;
+}> {
+  try {
+    const requestData = {
+      tokenId: nftData.tokenId,
+      contractAddress: nftData.contractAddress,
+      contractName: nftData.contractName,
+      creatorAddress: nftData.creatorAddress,
+      currentOwner: nftData.creatorAddress, // Initially, creator is the owner
+      name: nftData.name,
+      description: nftData.description,
+      artist: nftData.artist,
+      imageUrl: nftData.imageUrl,
+      imageCid: nftData.imageCid,
+      audioUrl: nftData.audioUrl,
+      audioCid: nftData.audioCid,
+      externalUrl: nftData.externalUrl,
+      audioFormat: nftData.audioFormat,
+      durationSeconds: nftData.durationSeconds,
+      fileSizeBytes: nftData.fileSizeBytes,
+      metadataCid: nftData.metadataCid,
+      royaltyPercentage: nftData.royaltyPercentage,
+      attributes: nftData.attributes,
+      mintTxId: nftData.mintTxId,
+      blockHeight: nftData.blockHeight,
+      mintLocationLat: nftData.mintLocationLat,
+      mintLocationLng: nftData.mintLocationLng,
+    };
+
+    const response = await axios.post('/api/nfts', requestData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.data.success) {
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } else {
+      return {
+        success: false,
+        error: response.data.error || 'Failed to save NFT data',
+      };
+    }
+  } catch (error) {
+    console.error('Error saving NFT to database:', error);
+    
+    if (axios.isAxiosError(error)) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Network error',
+      };
+    }
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
