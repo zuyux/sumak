@@ -4,19 +4,26 @@ import axios from 'axios';
 
 export const maxDuration = 60; // 60 seconds timeout
 export const dynamic = 'force-dynamic';
-
-// Configure maximum request size
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
     console.log('Files API called');
+    console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+    
+    // Check content-length header first for early 413 detection
+    const contentLength = request.headers.get('content-length');
+    if (contentLength) {
+      const sizeInMB = parseInt(contentLength) / (1024 * 1024);
+      console.log(`Request body size: ${sizeInMB.toFixed(2)}MB`);
+      
+      // Pre-check against our limits before parsing
+      if (parseInt(contentLength) > 30 * 1024 * 1024) { // 30MB total limit
+        return NextResponse.json({ 
+          error: `Request too large. Total size: ${sizeInMB.toFixed(2)}MB. Maximum allowed: 30MB` 
+        }, { status: 413 });
+      }
+    }
     
     const data = await request.formData();
     const mintFile = data.get("file") as File | null;
@@ -31,9 +38,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No mint file provided" }, { status: 400 });
     }
 
-    // Validate file sizes with appropriate limits for Vercel deployment
-    // Based on testing: 5MB+ files work successfully, so we can be more generous
-    const maxMintSize = 25 * 1024 * 1024; // 25MB for audio files (tested working up to 5MB+)
+    // Validate file sizes with reasonable limits for audio/image uploads
+    const maxMintSize = 25 * 1024 * 1024; // 25MB for audio files
     const maxImageSize = 10 * 1024 * 1024;  // 10MB for images
     
     if (mintFile.size > maxMintSize) {
@@ -50,11 +56,19 @@ export async function POST(request: NextRequest) {
 
     console.log('Uploading mint file to Pinata:', mintFile.name);
 
-    // Check environment variables
+    // Check environment variables with better production logging
     if (!process.env.PINATA_JWT) {
       console.error('PINATA_JWT environment variable not set');
+      console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('PINATA')));
       return NextResponse.json({ error: "Server configuration error - missing Pinata credentials" }, { status: 500 });
     }
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    console.log('Environment:', { 
+      isProduction, 
+      hasJWT: !!process.env.PINATA_JWT,
+      jwtLength: process.env.PINATA_JWT?.length || 0 
+    });
 
     console.log('Pinata configuration check passed');
     console.log('Upload starting for:', {
@@ -63,26 +77,54 @@ export async function POST(request: NextRequest) {
       fileType: mintFile.type
     });
 
-    // Upload the mint file to Pinata with error handling
+    // Upload the mint file to Pinata with enhanced error handling
     let mintResult;
     try {
+      console.log('Starting Pinata upload with enhanced error handling...');
       mintResult = await pinata.upload.public.file(mintFile);
     } catch (error) {
-      console.error('Pinata mint upload error:', error);
+      console.error('Pinata mint upload error details:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack',
+        isAxiosError: axios.isAxiosError(error)
+      });
+      
       if (axios.isAxiosError(error)) {
+        console.error('Axios error response:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.response?.headers
+        });
+        
         if (error.response?.status === 413) {
           return NextResponse.json({ 
-            error: "Mint file too large for IPFS upload. Please reduce file size." 
+            error: "File too large for IPFS upload. Try compressing your audio file to under 20MB." 
           }, { status: 413 });
         }
         if (error.response?.status === 429) {
           return NextResponse.json({ 
-            error: "Too many upload requests. Please wait and try again." 
+            error: "Pinata rate limit exceeded. Please wait 60 seconds and try again." 
           }, { status: 429 });
+        }
+        if (error.response?.status === 401) {
+          return NextResponse.json({ 
+            error: "IPFS authentication failed. Please contact support if this persists." 
+          }, { status: 500 });
+        }
+        if (error.response?.status === 402) {
+          return NextResponse.json({ 
+            error: "IPFS storage limit exceeded. Please try with a smaller file." 
+          }, { status: 413 });
+        }
+        if (error.code === 'ECONNABORTED') {
+          return NextResponse.json({ 
+            error: "Upload timeout. Please check your connection and try again with a smaller file." 
+          }, { status: 408 });
         }
       }
       return NextResponse.json({ 
-        error: "Failed to upload mint file to IPFS. Please try again." 
+        error: "Failed to upload file to IPFS. Please try again with a smaller file or contact support." 
       }, { status: 500 });
     }
     
@@ -96,28 +138,37 @@ export async function POST(request: NextRequest) {
     let imageCid = null;
     let imageUrl = null;
 
-    // Upload the image file to Pinata (if provided) with error handling
+    // Upload the image file to Pinata (if provided) with enhanced error handling
     if (imageFile) {
       console.log('Uploading image file to Pinata:', imageFile.name);
       let imageResult;
       try {
         imageResult = await pinata.upload.public.file(imageFile);
       } catch (error) {
-        console.error('Pinata image upload error:', error);
+        console.error('Pinata image upload error details:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          isAxiosError: axios.isAxiosError(error)
+        });
+        
         if (axios.isAxiosError(error)) {
           if (error.response?.status === 413) {
             return NextResponse.json({ 
-              error: "Image file too large for IPFS upload. Please reduce file size." 
+              error: "Image file too large for IPFS upload. Please compress to under 8MB." 
             }, { status: 413 });
           }
           if (error.response?.status === 429) {
             return NextResponse.json({ 
-              error: "Too many upload requests. Please wait and try again." 
+              error: "Pinata rate limit exceeded. Please wait and try again." 
             }, { status: 429 });
+          }
+          if (error.response?.status === 401) {
+            return NextResponse.json({ 
+              error: "IPFS authentication failed. Please contact support." 
+            }, { status: 500 });
           }
         }
         return NextResponse.json({ 
-          error: "Failed to upload image file to IPFS. Please try again." 
+          error: "Failed to upload image to IPFS. Please try again with a smaller image." 
         }, { status: 500 });
       }
       

@@ -28,7 +28,23 @@ export default function PersistentPlayer() {
     navigateToCurrentNFT,
   } = useMusicPlayer();
 
+  const [imageError, setImageError] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Reset image error when album changes
+  useEffect(() => {
+    setImageError(false);
+  }, [currentAlbum?.metadata?.image]);
+
+  const handleImageError = () => {
+    console.log('PersistentPlayer image failed to load, using fallback');
+    setImageError(true);
+  };
+
+  const handleImageLoad = () => {
+    console.log('PersistentPlayer image loaded successfully');
+    setImageError(false);
+  };
   const [localVolume, setLocalVolume] = useState(volume);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -195,28 +211,20 @@ export default function PersistentPlayer() {
             }`}>
               {currentAlbum?.metadata?.image ? (
                 <Image
-                  src={currentAlbum.metadata.image}
+                  src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
                   alt={getTitle(currentAlbum.metadata)}
                   fill
                   className="object-cover"
-                  onError={(e) => {
-                    console.error('PersistentPlayer image failed to load:', {
-                      src: currentAlbum?.metadata?.image,
-                      title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown',
-                      error: e
-                    });
-                  }}
-                  onLoad={() => {
-                    console.log('PersistentPlayer image loaded successfully:', {
-                      src: currentAlbum?.metadata?.image,
-                      title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown'
-                    });
-                  }}
+                  onError={handleImageError}
+                  onLoad={handleImageLoad}
                 />
               ) : (
-                <div className="w-full h-full bg-muted flex items-center justify-center">
-                  <span className="text-xs text-muted-foreground">No Image</span>
-                </div>
+                <Image
+                  src="/SUMAK.png"
+                  alt="SUMAK Default"
+                  fill
+                  className="object-cover"
+                />
               )}
             </div>
             <div className="min-w-0 flex-1">

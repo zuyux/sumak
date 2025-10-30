@@ -53,7 +53,7 @@ function MintedTokensGrid({ nfts }: { nfts: NFT[] }) {
         return (
           <Link
             key={`${nft.contract_address}-${nft.token_id}`}
-            href={`/${nft.contract_address}/${nft.contract_name}/${nft.token_id}`}
+            href={`/${nft.creator_address}/${nft.contract_name}/${nft.token_id}`}
             className="block transition-transform"
           >
             <div className="bg-background p-0 shadow cursor-pointer">
@@ -63,7 +63,7 @@ function MintedTokensGrid({ nfts }: { nfts: NFT[] }) {
                   <Image
                     src={(() => {
                       const img = nft.image_url || (nft.image_cid ? getIPFSUrl(nft.image_cid) : '');
-                      if (!img) return '/SUMAK-DIY.png';
+                      if (!img) return '/SUMAK.png';
                       let out = img;
                       if (img.startsWith('ipfs://')) {
                         out = `https://ipfs.io/ipfs/${img.replace('ipfs://', '')}`;
@@ -80,8 +80,8 @@ function MintedTokensGrid({ nfts }: { nfts: NFT[] }) {
                     unoptimized
                     onError={(e) => {
                       const imgEl = e.currentTarget as HTMLImageElement;
-                      if (imgEl && imgEl.src !== window.location.origin + '/SUMAK-DIY.png') {
-                        imgEl.src = '/SUMAK-DIY.png';
+                      if (imgEl && imgEl.src !== window.location.origin + '/SUMAK.png') {
+                        imgEl.src = '/SUMAK.png';
                       }
                     }}
                   />

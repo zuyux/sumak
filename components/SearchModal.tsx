@@ -444,20 +444,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                         className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer group transition-all duration-200"
                         onClick={onClose}
                       >
-                        <div className="w-10 h-10 bg-[#333] rounded-full flex-shrink-0 overflow-hidden">
-                          {artist.avatar_url || artist.avatar_cid ? (
-                            <SafariOptimizedImage
-                              src={artist.avatar_cid ? getIPFSUrl(artist.avatar_cid) : artist.avatar_url!}
-                              alt={artist.display_name || artist.username || 'User'}
-                              width={40}
-                              height={40}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                              <User size={16} className="text-white" />
-                            </div>
-                          )}
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center">
+                          <User size={16} className="text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-white font-medium text-sm truncate">

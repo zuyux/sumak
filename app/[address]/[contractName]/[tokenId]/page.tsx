@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 // import { getProfile } from '@/lib/profileApi';
 // Temporarily removed import: import { getNftsByCreator } from '@/lib/nftApi';
 
@@ -47,6 +47,10 @@ type TokenMetadata = {
   minted_at?: string;
   blockchain?: string;
   token_standard?: string;
+  id?: string | number;
+  token_id?: string | number;
+  contract_address?: string;
+  contract_name?: string;
   [key: string]: unknown;
 };
 
@@ -73,11 +77,8 @@ export default function NFTDetailPage() {
     async function fetchDeployer() {
       if (!address || !contractName) return;
       try {
-        // Determine the correct API URL based on network
-        const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
-        const apiUrl = networkEnv === "mainnet" 
-          ? `https://stacks-node-api.mainnet.stacks.co/extended/v1/contract/${address}/${contractName}`
-          : `https://stacks-node-api.testnet.stacks.co/extended/v1/contract/${address}/${contractName}`;
+        // Use proxy to avoid CORS issues
+        const apiUrl = `/api/stacks-proxy/extended/v1/contract/${address}/${contractName}`;
         
         const res = await fetch(apiUrl);
         if (res.ok) {
@@ -125,6 +126,31 @@ export default function NFTDetailPage() {
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
   const [creatorNfts, setCreatorNfts] = useState<TokenMetadata[]>([]);
 
+  // Function to fetch NFT data from database
+  const fetchNFTFromDatabase = useCallback(async () => {
+    if (!address || !contractName || !tokenId) return null;
+    
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('nfts')
+        .select('*')
+        .eq('contract_address', address)
+        .eq('contract_name', contractName)
+        .eq('token_id', parseInt(tokenId))
+        .single();
+      
+      if (error) {
+        console.warn('Could not fetch NFT from database:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (err) {
+      console.error('Error fetching NFT from database:', err);
+      return null;
+    }
+  }, [address, contractName, tokenId]);
+
   // Contract interaction functions
   const checkIfListed = useCallback(async () => {
     if (!address || !contractName || !tokenId) return;
@@ -133,7 +159,7 @@ export default function NFTDetailPage() {
       setIsLoading(true);
       
       // Check listing status from database instead of contract
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('nfts')
         .select('is_listed, list_price, list_currency')
         .eq('contract_address', address)
@@ -322,7 +348,7 @@ export default function NFTDetailPage() {
       }
 
       // Check price from database
-      const { data: nftData } = await supabase
+      const { data: nftData } = await supabaseAdmin
         .from('nfts')
         .select('is_listed, list_price, list_currency')
         .eq('contract_address', address)
@@ -408,15 +434,34 @@ export default function NFTDetailPage() {
                 setAudioUrl(audioSrc);
               }
 
-              // Set cover image URL from image field
+              // Set cover image URL - prioritize database image_cid, then image_url, then metadata image
               let imageSrc = '';
-              if (nftData.image) {
+              
+              // First try to get image from database
+              const dbNftData = await fetchNFTFromDatabase();
+              if (dbNftData?.image_cid) {
+                imageSrc = `https://ipfs.io/ipfs/${dbNftData.image_cid}`;
+                console.log('Using cover image from database image_cid:', imageSrc);
+              } else if (dbNftData?.image_url) {
+                imageSrc = dbNftData.image_url;
+                if (imageSrc.startsWith('ipfs://')) {
+                  imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                } else if (imageSrc.includes('gateway.pinata.cloud')) {
+                  imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+                }
+                console.log('Using cover image from database image_url:', imageSrc);
+              } else if (nftData && nftData.image) {
+                // Fallback to metadata image
                 imageSrc = nftData.image;
                 if (imageSrc.startsWith('ipfs://')) {
                   imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
                 } else if (imageSrc.includes('gateway.pinata.cloud')) {
                   imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
                 }
+                console.log('Using cover image from metadata fallback:', imageSrc);
+              }
+              
+              if (imageSrc) {
                 setCoverImageUrl(imageSrc);
               }
 
@@ -588,7 +633,7 @@ export default function NFTDetailPage() {
     if (address && contractName && tokenId) {
       initializeData();
     }
-  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, currentUserAddress]);
+  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, currentUserAddress, fetchNFTFromDatabase]);
 
   useEffect(() => {
     const fetchCreatorData = async () => {
@@ -661,6 +706,8 @@ export default function NFTDetailPage() {
                         src={coverImageUrl} 
                         alt={metadata?.name || 'Audio NFT Cover'} 
                         fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        priority
                         className="object-cover"
                       />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
@@ -1332,7 +1379,7 @@ export default function NFTDetailPage() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {creatorNfts.map((nft) => (
-                <Link key={String(nft.id ?? nft.token_id)} href={`/${nft.creator_address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center relative overflow-hidden">
+                <Link key={String(nft.id ?? nft.token_id)} href={`/${address}/${nft.contract_name}/${nft.token_id}`} className="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center relative overflow-hidden">
                   {nft.image ? (
                     <Image 
                       src={nft.image} 

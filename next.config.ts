@@ -23,9 +23,18 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     // Enable unoptimized images as fallback
     unoptimized: false,
+    // Configure image qualities to fix warnings
+    qualities: [75, 90, 100],
     // Increase device sizes for better responsive images
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
+  // Configure server external packages and large page data
+  serverExternalPackages: ['sharp'],
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+    // Enable large request body handling
+    largePageDataBytes: 128 * 1024 * 1024, // 128MB
   },
   headers: async () => {
     return [
@@ -51,6 +60,23 @@ const nextConfig: NextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
+          },
+        ],
+      },
+      {
+        source: '/api/(.*)',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, PUT, DELETE, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization, X-Requested-With',
           },
         ],
       },
@@ -93,10 +119,6 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
-  },
-  // Additional compatibility settings
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
   },
 };
 

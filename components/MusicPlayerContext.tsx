@@ -116,8 +116,8 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
       .select('*')
       .not('audio_url', 'is', null) // Only get NFTs with audio
       .eq('status', 'active') // Only active NFTs
-      .order('created_at', { ascending: false })
-      .limit(50); // Limit to 50 most recent
+      .order('created_at', { ascending: true })
+      .limit(50); // Limit to 50 oldest
 
     if (error) {
       console.error('Error fetching NFTs:', error);
@@ -137,6 +137,9 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
       const imageUrl = nft.image_url || (nft.image_cid ? `https://ipfs.io/ipfs/${nft.image_cid}` : '');
       const audioUrl = nft.audio_url || (nft.audio_cid ? `https://ipfs.io/ipfs/${nft.audio_cid}` : '');
       
+      // Ensure we have a valid image URL, provide fallback if needed
+      const safeImageUrl = imageUrl || '/SUMAK.png'; // Use SUMAK logo as fallback
+      
       return {
         id: `${nft.contract_address}-${nft.token_id}`,
         metadataUrl: `https://ipfs.io/ipfs/${nft.metadata_cid}`,
@@ -146,7 +149,7 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
         metadata: {
           name: nft.name,
           description: nft.description || '',
-          image: imageUrl,
+          image: safeImageUrl,
           animation_url: audioUrl,
           external_url: nft.external_url,
           attributes: Array.isArray(nft.attributes) ? nft.attributes as Array<{trait_type: string; value: string | number}> : [],
@@ -211,7 +214,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(240);
   const [volume, setVolumeState] = useState(0.7);
-  const [isShuffled, setIsShuffled] = useState(false);
+  const [isShuffled, setIsShuffled] = useState(true);
   const [isRepeating, setIsRepeating] = useState(false);
   const [albumsWithMetadata, setAlbumsWithMetadata] = useState<Album[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -286,8 +289,13 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         
         // Convert any IPFS gateway URLs in the metadata to ipfs.io
         if (metadata.image) {
-          metadata.image = convertToIpfsIo(metadata.image);
+          const convertedImage = convertToIpfsIo(metadata.image);
+          // Validate that the converted URL is not empty
+          metadata.image = convertedImage || '/SUMAK.png';
+        } else {
+          metadata.image = '/SUMAK.png';
         }
+        
         if (metadata.animation_url) {
           metadata.animation_url = convertToIpfsIo(metadata.animation_url);
         }
@@ -557,7 +565,14 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   // Helper function to get current background image
   const getCurrentBackgroundImage = useCallback((): string | null => {
-    return currentAlbum?.metadata?.image || null;
+    const imageUrl = currentAlbum?.metadata?.image;
+    
+    // Return null if no image or if it's the placeholder
+    if (!imageUrl || imageUrl === '/SUMAK.png') {
+      return null;
+    }
+    
+    return imageUrl;
   }, [currentAlbum?.metadata?.image]);
 
   // Audio event listeners

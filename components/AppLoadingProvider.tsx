@@ -48,9 +48,8 @@ export function AppLoadingProvider({
       const criticalAssets = [
         '/loader.gif',
         '/loaderb.gif',
-        '/home.svg',
-        '/SUMAK-DIY.svg',
-        '/SUMAK-DIY.png'
+        '/globe.svg',
+        '/mail-ico.svg'
       ];
 
       // Load home page assets as well since it's the landing page

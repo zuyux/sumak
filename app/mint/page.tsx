@@ -137,10 +137,10 @@ export default function MintPage() {
   const [interoperabilityFormats, setInteroperabilityFormats] = useState<string>('');
   
   // Available format options
-  const availableFormats = ['mp3', 'wav', 'flac', 'aac'];
+  const availableFormats = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'];
   const [customizationData, setCustomizationData] = useState<string>('');
-  const [edition, setEdition] = useState<string>('');
-  const [royalties, setRoyalties] = useState<string>('');
+  const [edition, setEdition] = useState<string>('1');
+  const [royalties, setRoyalties] = useState<string>('7');
   const [properties, setProperties] = useState<string>('');
   
   // Helper states for better UX - start with empty arrays
@@ -157,6 +157,17 @@ export default function MintPage() {
       return acc;
     }, {} as Record<string, string>);
     setAttributes(JSON.stringify(obj));
+  };
+
+  // Helper function to sanitize name for contract use
+  const sanitizeNameForContract = (name: string): string => {
+    return name
+      .normalize('NFD') // Decompose accented characters
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[^a-zA-Z0-9\s\-_]/g, '') // Remove special characters except spaces, hyphens, underscores
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .toLowerCase() // Convert to lowercase
+      .trim();
   };
 
   const updatePropertiesFromList = (list: Array<{key: string, value: string}>) => {
@@ -356,7 +367,7 @@ export default function MintPage() {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       console.log(`Selected audio file: ${file.name}, Size: ${fileSizeMB}MB`);
       
-      // Add file size validation (25MB for audio files based on successful testing)
+      // Add file size validation (25MB for audio files - reasonable limit)
       if (file.size > 25 * 1024 * 1024) {
         setError(`El archivo es demasiado grande (${fileSizeMB}MB). El tamaño máximo permitido es 25MB. Tip: Puedes comprimir el audio a una calidad menor (ej: 192kbps o 256kbps) para reducir el tamaño.`);
         setAudioFile(null);
@@ -385,6 +396,40 @@ export default function MintPage() {
         setAudioFile(null);
         setAudioPreviewUrl(null);
         return;
+      }
+      
+      // Extract and set audio format immediately after validation
+      const detectedFormat = fileExtension.substring(1); // Remove the dot
+      
+      // Create a mapping for format normalization
+      const formatMapping: Record<string, string> = {
+        'mp3': 'mp3',
+        'wav': 'wav',
+        'wave': 'wav',
+        'flac': 'flac',
+        'aac': 'aac',
+        'm4a': 'm4a',
+        'ogg': 'ogg',
+        'mpeg': 'mp3', // MIME type fallback
+        'mp4': 'aac'   // Some AAC files use mp4 container
+      };
+      
+      const finalFormat = formatMapping[detectedFormat] || detectedFormat;
+      
+      if (availableFormats.includes(finalFormat)) {
+        setInteroperabilityFormats(finalFormat);
+        console.log('Auto-detected audio format from file extension:', finalFormat);
+      } else {
+        // Fallback: try to extract format from MIME type
+        const mimeTypeFormat = fileMimeType.split('/')[1]?.toLowerCase();
+        const mappedMimeFormat = formatMapping[mimeTypeFormat || ''] || mimeTypeFormat;
+        
+        if (mappedMimeFormat && availableFormats.includes(mappedMimeFormat)) {
+          setInteroperabilityFormats(mappedMimeFormat);
+          console.log('Auto-detected audio format from MIME type:', mappedMimeFormat);
+        } else {
+          console.warn('Could not auto-detect audio format, please select manually');
+        }
       }
       
       // Create audio object to extract metadata
@@ -606,13 +651,10 @@ export default function MintPage() {
       errors.name = 'El nombre es requerido';
     } else if (name.length > 23) {
       errors.name = 'Name must be 23 characters or less (allows space for timestamp suffix)';
-    } else if (!/^[a-zA-Z0-9\s\-_]+$/.test(name)) {
-      errors.name = 'Name can only contain letters, numbers, spaces, hyphens, and underscores';
     }
     
-    if (!description.trim()) {
-      errors.description = 'La descripción es requerida';
-    } else if (description.length > 500) {
+    // Description is now optional, only validate length if provided
+    if (description.length > 500) {
       errors.description = 'Description must be less than 500 characters';
     }
     
@@ -778,6 +820,183 @@ export default function MintPage() {
       xhr.timeout = 300000; // 5 minutes timeout
       xhr.send(formData);
     });
+  };
+
+  // New blob-based upload function using presigned URLs (bypasses Vercel body size limits)
+  // Enhanced image validation function
+  const validateImageFile = (file: File): { isValid: boolean; error?: string } => {
+    console.log('Validating image file:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified
+    });
+
+    // Check file size (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      return { isValid: false, error: 'Image file size must be less than 20MB' };
+    }
+
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return { isValid: false, error: 'Image must be JPEG, PNG, GIF, or WebP format' };
+    }
+
+    // Check if file is actually readable
+    if (file.size === 0) {
+      return { isValid: false, error: 'Image file appears to be empty' };
+    }
+
+    console.log('Image file validation passed');
+    return { isValid: true };
+  };
+
+  const uploadViaBlobStorage = async (audioFile: File, imageFile: File | null, metadata: Record<string, unknown>) => {
+    try {
+      setUploadProgress(10);
+      console.log('Starting blob-based upload for large files...');
+
+      // Import upload function dynamically to avoid SSR issues
+      const { upload } = await import('@vercel/blob/client');
+
+      // Step 1: Upload audio file to Vercel Blob using client-side upload
+      console.log('Uploading audio file to blob storage...');
+      
+      // Generate unique filename to avoid conflicts
+      const timestamp = Date.now();
+      const audioFilename = `audio/${timestamp}_${audioFile.name}`;
+      
+      const audioBlob = await upload(audioFilename, audioFile, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-to-blob',
+        clientPayload: JSON.stringify({
+          fileType: 'audio',
+          fileSize: audioFile.size,
+          fileName: audioFile.name,
+          originalName: audioFile.name,
+          type: audioFile.type
+        })
+      });
+
+      console.log('Audio blob uploaded:', audioBlob);
+      setUploadProgress(30);
+
+      // Step 2: Upload image file to Vercel Blob (if provided)
+      let imageBlob = null;
+      if (imageFile) {
+        console.log('Uploading image file to blob storage...');
+        
+        // Validate image file first
+        const validation = validateImageFile(imageFile);
+        if (!validation.isValid) {
+          throw new Error(validation.error || 'Invalid image file');
+        }
+        
+        console.log('Image file details:', {
+          name: imageFile.name,
+          size: `${(imageFile.size / 1024 / 1024).toFixed(2)}MB`,
+          type: imageFile.type,
+          lastModified: new Date(imageFile.lastModified).toISOString()
+        });
+        
+        try {
+          console.log('Starting image blob upload...');
+          
+          // Generate unique filename to avoid conflicts
+          const imageFilename = `image/${timestamp}_${imageFile.name}`;
+          
+          imageBlob = await upload(imageFilename, imageFile, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-to-blob',
+            clientPayload: JSON.stringify({
+              fileType: 'image',
+              fileSize: imageFile.size,
+              fileName: imageFile.name,
+              originalName: imageFile.name,
+              type: imageFile.type
+            })
+          });
+          
+          console.log('Image blob uploaded successfully:', {
+            url: imageBlob.url,
+            downloadUrl: imageBlob.downloadUrl,
+            pathname: imageBlob.pathname
+          });
+          
+          // Verify the blob was created properly
+          if (!imageBlob.downloadUrl || !imageBlob.url) {
+            throw new Error('Image blob upload succeeded but missing required URLs');
+          }
+          
+        } catch (imageError: unknown) {
+          const errorMsg = imageError instanceof Error ? imageError.message : 'Unknown image upload error';
+          console.error('Image blob upload failed:', {
+            error: errorMsg,
+            imageFile: {
+              name: imageFile.name,
+              size: imageFile.size,
+              type: imageFile.type
+            }
+          });
+          
+          // Try alternative upload method or show specific error
+          if (errorMsg.includes('too large') || errorMsg.includes('size')) {
+            throw new Error(`Image file is too large (${(imageFile.size / 1024 / 1024).toFixed(2)}MB). Please use an image smaller than 20MB.`);
+          } else if (errorMsg.includes('format') || errorMsg.includes('type')) {
+            throw new Error(`Unsupported image format: ${imageFile.type}. Please use JPEG, PNG, GIF, or WebP.`);
+          } else if (errorMsg.includes('already exists') || errorMsg.includes('allowOverwrite')) {
+            // This should now be handled by our allowOverwrite: true setting, but just in case
+            console.warn('Blob already exists error - this should be resolved with allowOverwrite setting');
+            throw new Error('File upload conflict. Please try again.');
+          } else {
+            console.warn('Continuing without image due to upload failure:', errorMsg);
+            imageBlob = null;
+          }
+        }
+      } else {
+        console.log('No image file provided, skipping image upload');
+      }
+      setUploadProgress(50);
+
+      // Step 3: Process files from blob storage to IPFS
+      console.log('Processing files from blob storage to IPFS...');
+      const processResponse = await fetch('/api/process-blob-to-ipfs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          audioBlob: {
+            url: audioBlob.url,
+            downloadUrl: audioBlob.downloadUrl,
+            pathname: audioBlob.pathname,
+            originalName: audioFile.name,
+            type: audioFile.type
+          },
+          imageBlob: imageBlob ? {
+            url: imageBlob.url,
+            downloadUrl: imageBlob.downloadUrl,
+            pathname: imageBlob.pathname,
+            originalName: imageFile?.name,
+            type: imageFile?.type
+          } : null,
+          metadata
+        })
+      });
+
+      if (!processResponse.ok) {
+        const errorData = await processResponse.json().catch(() => ({}));
+        throw new Error(errorData?.error || `IPFS processing failed with status ${processResponse.status}`);
+      }
+
+      setUploadProgress(100);
+      return await processResponse.json();
+
+    } catch (error) {
+      console.error('Blob upload error:', error);
+      throw error;
+    }
   };
 
   type DeployData = {
@@ -1319,44 +1538,159 @@ export default function MintPage() {
       });
 
       console.log('Starting file upload to IPFS...');
-      let metadataResponse: Response;
-      try {
-        metadataResponse = await uploadWithProgress(formData);
-      } catch (uploadError: unknown) {
-        console.error('Upload error details:', uploadError);
-        
-        // Handle different types of upload errors
-        if (
-          typeof uploadError === 'object' &&
-          uploadError !== null &&
-          'message' in uploadError &&
-          typeof (uploadError as { message: string }).message === 'string'
-        ) {
-          const message = (uploadError as { message: string }).message;
+      
+      // Check if we should use blob-based upload for large files
+      const audioSizeMB = (audioFile?.size || 0) / 1024 / 1024;
+      const imageSizeMB = (imageFile?.size || 0) / 1024 / 1024;
+      const totalSizeMB = audioSizeMB + imageSizeMB;
+      const shouldUseBlobUpload = totalSizeMB > 4 || audioSizeMB > 3; // Use blob for files >4MB total or >3MB audio
+      
+      console.log('Upload strategy decision:', {
+        audioSizeMB: audioSizeMB.toFixed(2),
+        imageSizeMB: imageSizeMB.toFixed(2),
+        totalSizeMB: totalSizeMB.toFixed(2),
+        strategy: shouldUseBlobUpload ? 'blob-based' : 'direct'
+      });
+
+      let responseData: {
+                    metadataCid?: string;
+                    audioUrl?: string;
+                    audioCid?: string;
+                    imageUrl?: string;
+                    imageCid?: string;
+                    audioFormat?: string;
+                    fileSizeBytes?: number;
+                    durationSeconds?: number;
+                    attributes?: Record<string, unknown>;
+                    metadata?: Record<string, unknown>;
+                    tokenId?: number;
+                    token_id?: number;
+                    id?: number;
+                    preventContractUpload?: boolean;
+                    validationErrors?: string[];
+                    error?: string;
+                  };
+      
+      if (shouldUseBlobUpload) {
+        // Use blob-based upload for large files
+        console.log('Using blob-based upload for large files...');
+        try {
+          responseData = await uploadViaBlobStorage(audioFile!, imageFile, metadata);
+        } catch (uploadError: unknown) {
+          console.error('Blob upload error details:', uploadError);
           
-          if (message.includes('413') || message.toLowerCase().includes('too large')) {
-            setError(`Falló la subida del archivo: El archivo es demasiado grande para que el servidor lo acepte. Archivo actual: ${((audioFile?.size || 0) / 1024 / 1024).toFixed(2)}MB. Límite: 50MB.`);
-            toast.error('File upload failed: File too large for server.');
-          } else if (message.toLowerCase().includes('timeout')) {
-            setError('Falló la subida del archivo: Tiempo de espera agotado. Tu archivo puede ser muy grande o la conexión es lenta. Intenta con un archivo más pequeño.');
-            toast.error('Upload timeout. Try a smaller file.');
-          } else if (message.toLowerCase().includes('rate limit') || message.includes('429')) {
-            setError('Falló la subida del archivo: Demasiadas solicitudes de subida. Por favor espera unos minutos e intenta de nuevo.');
-            toast.error('Rate limit exceeded. Please wait and try again.');
-          } else if (message.toLowerCase().includes('authentication') || message.includes('401')) {
-            setError('Falló la subida del archivo: Error de autenticación con el servicio de almacenamiento. Por favor contacta soporte.');
-            toast.error('Authentication error with storage service.');
-          } else if (message.toLowerCase().includes('connect') || message.toLowerCase().includes('network')) {
-            setError('Falló la subida del archivo: No se pudo conectar al servicio de almacenamiento. Verifica tu conexión a internet e intenta de nuevo.');
-            toast.error('Cannot connect to storage service. Check your internet connection.');
+          if (
+            typeof uploadError === 'object' &&
+            uploadError !== null &&
+            'message' in uploadError &&
+            typeof (uploadError as { message: string }).message === 'string'
+          ) {
+            const message = (uploadError as { message: string }).message;
+            
+            if (message.includes('413') || message.toLowerCase().includes('too large')) {
+              setError(`Falló la subida del archivo: Archivo demasiado grande. Tamaño: ${audioSizeMB.toFixed(2)}MB. Límite máximo: 50MB. Intenta comprimir tu archivo.`);
+              toast.error('File too large. Maximum size: 50MB.');
+            } else if (message.toLowerCase().includes('timeout')) {
+              setError('Falló la subida del archivo: Tiempo de espera agotado. Intenta con un archivo más pequeño o verifica tu conexión.');
+              toast.error('Upload timeout. Try a smaller file.');
+            } else if (message.toLowerCase().includes('rate limit') || message.includes('429')) {
+              setError('Falló la subida del archivo: Límite de velocidad excedido. Espera un momento e intenta de nuevo.');
+              toast.error('Rate limit exceeded. Please wait and try again.');
+            } else if (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('allowoverwrite')) {
+              setError('Falló la subida del archivo: Conflicto de archivo. El archivo ya existe. Intentando de nuevo...');
+              toast.error('File conflict. Please try uploading again.');
+            } else {
+              setError(`Falló la subida del archivo: ${message}`);
+              toast.error(message || 'Blob upload failed.');
+            }
           } else {
-            setError(`Falló la subida del archivo: ${message}`);
-            toast.error(message || 'File upload failed.');
+            setError('Falló la subida del archivo: Error desconocido en la subida.');
+            toast.error('Blob upload failed with unknown error.');
           }
-        } else {
-          setError('Falló la subida del archivo: Error desconocido.');
-          toast.error('File upload failed with unknown error.');
+          setMinting(false);
+          setDeployingContract(false);
+          setUploadProgress(0);
+          setLoadingState('idle');
+          return;
         }
+      } else {
+        // Use traditional direct upload for smaller files
+        console.log('Using direct upload for smaller files...');
+        let metadataResponse: Response;
+        try {
+          metadataResponse = await uploadWithProgress(formData);
+        } catch (uploadError: unknown) {
+          console.error('Upload error details:', uploadError);
+          
+          // Handle different types of upload errors
+          if (
+            typeof uploadError === 'object' &&
+            uploadError !== null &&
+            'message' in uploadError &&
+            typeof (uploadError as { message: string }).message === 'string'
+          ) {
+            const message = (uploadError as { message: string }).message;
+            
+            if (message.includes('413') || message.toLowerCase().includes('too large')) {
+              // If direct upload fails with 413, retry with blob upload
+              console.log('Direct upload failed with 413, retrying with blob upload...');
+              try {
+                responseData = await uploadViaBlobStorage(audioFile!, imageFile, metadata);
+              } catch {
+                setError(`Falló la subida del archivo: El archivo es demasiado grande. Archivo actual: ${audioSizeMB.toFixed(2)}MB. Intenta comprimir tu archivo.`);
+                toast.error('File too large. Please compress your file.');
+                setMinting(false);
+                setDeployingContract(false);
+                setUploadProgress(0);
+                setLoadingState('idle');
+                return;
+              }
+            } else if (message.toLowerCase().includes('timeout')) {
+              setError('Falló la subida del archivo: Tiempo de espera agotado. Tu archivo puede ser muy grande o la conexión es lenta. Intenta con un archivo más pequeño.');
+              toast.error('Upload timeout. Try a smaller file.');
+            } else if (message.toLowerCase().includes('rate limit') || message.includes('429')) {
+              setError('Falló la subida del archivo: Demasiadas solicitudes de subida. Por favor espera unos minutos e intenta de nuevo.');
+              toast.error('Rate limit exceeded. Please wait and try again.');
+            } else if (message.toLowerCase().includes('authentication') || message.includes('401')) {
+              setError('Falló la subida del archivo: Error de autenticación con el servicio de almacenamiento. Por favor contacta soporte.');
+              toast.error('Authentication error with storage service.');
+            } else if (message.toLowerCase().includes('connect') || message.toLowerCase().includes('network')) {
+              setError('Falló la subida del archivo: No se pudo conectar al servicio de almacenamiento. Verifica tu conexión a internet e intenta de nuevo.');
+              toast.error('Cannot connect to storage service. Check your internet connection.');
+            } else {
+              setError(`Falló la subida del archivo: ${message}`);
+              toast.error(message || 'File upload failed.');
+            }
+          } else {
+            setError('Falló la subida del archivo: Error desconocido.');
+            toast.error('File upload failed with unknown error.');
+          }
+          setMinting(false);
+          setDeployingContract(false);
+          setUploadProgress(0);
+          setLoadingState('idle');
+          return;
+        }
+
+        if (!metadataResponse.ok) {
+          const errorData = await metadataResponse.json().catch(() => ({}));
+          throw new Error(errorData?.error || 'Failed to upload metadata to IPFS');
+        }
+
+        responseData = await metadataResponse.json();
+      }
+
+      const sanitizedCid = responseData.metadataCid?.trim();
+
+      if (!sanitizedCid) {
+        throw new Error('Invalid metadata CID retrieved from server');
+      }
+
+      // CRITICAL VALIDATION: Check if upload response indicates validation failures
+      if (responseData.preventContractUpload) {
+        console.error('Upload validation failed - preventing contract deployment:', responseData.validationErrors);
+        setError(`Upload validation failed: ${responseData.error || 'Required files failed to upload to IPFS'}`);
+        toast.error('Upload validation failed. Cannot proceed with contract deployment.');
         setMinting(false);
         setDeployingContract(false);
         setUploadProgress(0);
@@ -1364,24 +1698,42 @@ export default function MintPage() {
         return;
       }
 
-      if (!metadataResponse.ok) {
-        const errorData = await metadataResponse.json().catch(() => ({}));
-        throw new Error(errorData?.error || 'Failed to upload metadata to IPFS');
+      // Additional client-side validation for required CIDs
+      const missingCids = [];
+      if (!responseData.audioCid) {
+        missingCids.push('Audio CID');
       }
+      if (!responseData.metadataCid) {
+        missingCids.push('Metadata CID');
+      }
+      // Note: Image CID is optional, but if image was provided and failed, that's handled by server validation
 
-      const responseData = await metadataResponse.json();
-      const sanitizedCid = responseData.metadataCid?.trim();
-
-      if (!sanitizedCid) {
-        throw new Error('Invalid metadata CID retrieved from server');
+      if (missingCids.length > 0) {
+        const errorMsg = `Missing required CIDs: ${missingCids.join(', ')}. Cannot deploy contract.`;
+        console.error('Client-side CID validation failed:', {
+          missingCids,
+          responseData: {
+            audioCid: responseData.audioCid,
+            imageCid: responseData.imageCid,
+            metadataCid: responseData.metadataCid
+          }
+        });
+        setError(errorMsg);
+        toast.error('Required files missing. Contract deployment aborted.');
+        setMinting(false);
+        setDeployingContract(false);
+        setUploadProgress(0);
+        setLoadingState('idle');
+        return;
       }
 
       console.log('Upload successful, CID:', sanitizedCid);
-      console.log('Response data:', {
+      console.log('All required CIDs validated:', {
         imageUrl: responseData.imageUrl,
         audioUrl: responseData.audioUrl,
         imageCid: responseData.imageCid,
-        audioCid: responseData.audioCid
+        audioCid: responseData.audioCid,
+        metadataCid: sanitizedCid
       });
 
       // Step 2: Deploy contract with retry logic
@@ -1389,7 +1741,7 @@ export default function MintPage() {
       setContractDeploymentStep('Preparing contract deployment...');
 
       const deployData = {
-        mintName: name.trim(),
+        mintName: sanitizeNameForContract(name.trim()),
         initialCid: sanitizedCid,
         userAddress: effectiveAddress!,
         network: process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet',
@@ -1463,8 +1815,7 @@ export default function MintPage() {
       // Redirect using contractAddress and contractName
       // Redirect to NFT detail page, defaulting to tokenId 1 if not present
       const tokenId = responseData.tokenId || responseData.token_id || responseData.id || 1;
-      const fullContractAddress = `${deployResult.contractAddress}.${deployResult.contractName}`;
-      const redirectPath = `/${fullContractAddress}/${deployResult.contractName}/${tokenId}`;
+      const redirectPath = `/${deployResult.contractAddress}/${deployResult.contractName}/${tokenId}`;
       
       // Wait a bit to show the success message
       setTimeout(() => {
@@ -1725,6 +2076,70 @@ export default function MintPage() {
               </CardTitle>
             </div>
             
+            {/* Cover Image Upload - Square Layout */}
+            <div className='mb-4'>
+              <Label htmlFor="imageFile" className='mb-2'>Imagen de Portada</Label>
+              <div className="flex gap-4 items-start">
+                {/* Square preview area */}
+                <div className="w-32 h-32 flex-shrink-0">
+                  {imagePreviewUrl ? (
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={imagePreviewUrl}
+                        alt="Cover image preview"
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover rounded-lg border border-[#555]"
+                        unoptimized={true}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (imagePreviewUrl) {
+                            URL.revokeObjectURL(imagePreviewUrl);
+                          }
+                          setImageFile(null);
+                          setImagePreviewUrl(null);
+                          // Reset the file input
+                          const fileInput = document.getElementById('imageFile') as HTMLInputElement;
+                          if (fileInput) fileInput.value = '';
+                        }}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <ImageIcon className="w-8 h-8 text-gray-500 mx-auto mb-1" />
+                        <p className="text-xs text-gray-500">Square Cover</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Upload controls */}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    id="imageFile"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    className='border-[#333] cursor-pointer mb-2'
+                  />
+                  <p className="text-gray-400 text-xs">
+                    Formatos soportados: JPEG, PNG, GIF, WebP. Máximo: 10MB
+                  </p>
+                  {imageFile && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {imageFile.name} ({((imageFile.size || 0) / (1024 * 1024)).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Scrollable content */}
             <div 
               className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar" 
@@ -1828,7 +2243,7 @@ export default function MintPage() {
                     setValidationErrors(prev => ({ ...prev, name: '' }));
                   }
                 }}
-                placeholder="Título"
+                placeholder="Name"
                 className={`border-[#333] p-6 text-lg ${validationErrors.name ? 'border-red-500' : ''}`}
                 maxLength={23}
               />
@@ -1864,98 +2279,12 @@ export default function MintPage() {
               </p>
             </div>
 
-            {/* Description field with validation */}
-            <div>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  if (validationErrors.description) {
-                    setValidationErrors(prev => ({ ...prev, description: '' }));
-                  }
-                }}
-                placeholder="Descripción"
-                className={`border-[#333] p-6 text-lg min-h-[144px] ${validationErrors.description ? 'border-red-500' : ''}`}
-              />
-              {validationErrors.description && (
-                <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.description}</p>
-              )}
-              <p className="text-[#555] text-xs text-right mt-1">
-                {description.length}/500 characters
-              </p>
-            </div>
-
             {/* Audio file validation error */}
             {validationErrors.audioFile && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                 <p className="text-red-600 dark:text-red-400 text-sm select-text">{validationErrors.audioFile}</p>
               </div>
             )}
-
-            {/* Cover Image Upload - Square Layout */}
-            <div>
-              <Label htmlFor="imageFile" className='mb-2'>Imagen de Portada</Label>
-              <div className="flex gap-4 items-start">
-                {/* Square preview area */}
-                <div className="w-32 h-32 flex-shrink-0">
-                  {imagePreviewUrl ? (
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={imagePreviewUrl}
-                        alt="Cover image preview"
-                        width={128}
-                        height={128}
-                        className="w-full h-full object-cover rounded-lg border border-[#555]"
-                        unoptimized={true}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (imagePreviewUrl) {
-                            URL.revokeObjectURL(imagePreviewUrl);
-                          }
-                          setImageFile(null);
-                          setImagePreviewUrl(null);
-                          // Reset the file input
-                          const fileInput = document.getElementById('imageFile') as HTMLInputElement;
-                          if (fileInput) fileInput.value = '';
-                        }}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs cursor-pointer"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-full h-full bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <ImageIcon className="w-8 h-8 text-gray-500 mx-auto mb-1" />
-                        <p className="text-xs text-gray-500">Square Cover</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Upload controls */}
-                <div className="flex-1">
-                  <Input
-                    type="file"
-                    id="imageFile"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className='border-[#333] cursor-pointer mb-2'
-                  />
-                  <p className="text-gray-400 text-xs">
-                    Formatos soportados: JPEG, PNG, GIF, WebP. Máximo: 10MB
-                  </p>
-                  {imageFile && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {imageFile.name} ({((imageFile.size || 0) / (1024 * 1024)).toFixed(2)} MB)
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
 
             <div className='flex w-full'>
               <Button 
@@ -1966,6 +2295,29 @@ export default function MintPage() {
             </div>
             {showAdvancedOptions && (
               <div className="space-y-4">
+                {/* Description field - now optional and in advanced options */}
+                <div>
+                  <Label htmlFor="description" className='my-2'>Description (Optional)</Label>
+                  <Textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      if (validationErrors.description) {
+                        setValidationErrors(prev => ({ ...prev, description: '' }));
+                      }
+                    }}
+                    placeholder="Descripción opcional del NFT de audio"
+                    className={`border-[#333] p-6 text-lg min-h-[120px] ${validationErrors.description ? 'border-red-500' : ''}`}
+                  />
+                  {validationErrors.description && (
+                    <p className="text-red-400 text-xs mt-1 select-text">{validationErrors.description}</p>
+                  )}
+                  <p className="text-[#555] text-xs text-right mt-1">
+                    {description.length}/500 characters
+                  </p>
+                </div>
+
                 <div>
                   <Label htmlFor="externalUrl" className='my-2'>External URL</Label>
                   <Input
@@ -2244,7 +2596,7 @@ export default function MintPage() {
                       type="button"
                       onClick={handleOpenLocationModal}
                       variant="outline"
-                      className="w-full px-4 py-2 border-[#333] text-gray-300 hover:bg-background cursor-pointer"
+                      className="w-full px-4 py-2 border-foreground text-gray-300 hover:bg-background cursor-pointer"
                     >
                       Select on Map
                     </Button>
@@ -2297,6 +2649,26 @@ export default function MintPage() {
             {error && (
               <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
                 <p className="text-red-400 text-sm select-text">{error}</p>
+                {/* Show upload other audio file button when there's an audio-related error */}
+                {(error.includes('archivo') || error.includes('audio') || error.includes('File') || error.includes('upload') || error.includes('formato') || error.includes('tamaño') || error.includes('size') || error.includes('type') || error.includes('invalid') || error.includes('large') || error.includes('duration') || !audioFile) && (
+                  <div className="mt-3">
+                    <Label htmlFor="audioFileError" className="sr-only">Upload other audio file</Label>
+                    <Input
+                      type="file"
+                      id="audioFileError"
+                      accept=".mp3,.wav,.flac,.aac,.m4a,.ogg"
+                      onChange={handleAudioFileChange}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="audioFileError"
+                      className="w-full inline-flex items-center gap-2 bg-transparent hover:bg-transparent text-white text-center px-4 py-2 rounded-md cursor-pointer transition-colors"
+                    >
+                      <Music className="w-4 h-4" />
+                      Subir otro archivo de audio
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
