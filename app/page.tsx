@@ -4,6 +4,8 @@ import Footer from '@/components/Footer';
 import { Navbar } from '@/components/Navbar';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import OrbVisualizer from '@/components/OrbVisualizer';
+// ...existing code...
+// ...existing code...
 import Image from 'next/image';
 import { useRef, useEffect, useCallback, useState } from 'react';
 
@@ -20,6 +22,7 @@ export default function Page() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const [backgroundImageLoaded, setBackgroundImageLoaded] = useState(false);
+  // ...existing code...
 
   // Reset background image state when album changes
   useEffect(() => {
@@ -143,6 +146,7 @@ export default function Page() {
                 src={currentAlbum.metadata.image}
                 alt="Background"
                 fill
+                sizes="100vw"
                 className="object-cover"
                 style={{
                   filter: 'blur(40px) brightness(0.4)',
@@ -186,7 +190,7 @@ export default function Page() {
           </div>
         )}
 
-        <OrbVisualizer/>
+        <OrbVisualizer />
 
         {/* Audio Visualizer Timeline */}
         <div className="fixed bottom-20 md:bottom-6 left-0 right-0 mb-6">

@@ -56,6 +56,7 @@ export default function ImageLoadTest({ src, alt }: ImageTestProps) {
           src={src}
           alt={alt}
           fill
+          sizes="128px"
           className="object-cover"
           onLoad={handleLoad}
           onError={handleError}

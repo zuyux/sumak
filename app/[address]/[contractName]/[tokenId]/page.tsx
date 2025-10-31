@@ -1385,6 +1385,7 @@ export default function NFTDetailPage() {
                       src={nft.image} 
                       alt={nft.name || 'NFT'} 
                       fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 16vw"
                       className="object-cover rounded-lg" 
                     />
                   ) : (

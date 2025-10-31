@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMusicPlayer } from './MusicPlayerContext';
+import { useFullscreenContext } from './FullscreenProvider';
 
 export default function PersistentPlayer() {
   const router = useRouter();
+  const { isFullscreen } = useFullscreenContext();
   const {
     currentAlbum,
     isPlaying,
@@ -194,7 +196,11 @@ export default function PersistentPlayer() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border">
+    <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 ${
+      isFullscreen 
+        ? 'bg-background/20 backdrop-blur-xl' 
+        : 'bg-background/95 backdrop-blur-md'
+    }`}>
       {/* Collapsed view - Grid layout similar to Spotify */}
       {!isExpanded && (
         <div className="grid grid-cols-3 items-center px-0 py-0 h-20 gap-4">
@@ -214,6 +220,8 @@ export default function PersistentPlayer() {
                   src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
                   alt={getTitle(currentAlbum.metadata)}
                   fill
+                  sizes="80px"
+                  priority
                   className="object-cover"
                   onError={handleImageError}
                   onLoad={handleImageLoad}
@@ -223,6 +231,8 @@ export default function PersistentPlayer() {
                   src="/SUMAK.png"
                   alt="SUMAK Default"
                   fill
+                  sizes="80px"
+                  priority
                   className="object-cover"
                 />
               )}
@@ -343,12 +353,18 @@ export default function PersistentPlayer() {
                 alt={getTitle(currentAlbum.metadata)}
                 fill
                 className="object-cover"
+                sizes="64px"
+                priority
                 onError={(e) => {
-                  console.error('Expanded view image error:', {
-                    src: currentAlbum.metadata?.image,
-                    title: currentAlbum?.metadata ? getTitle(currentAlbum.metadata) : 'Unknown',
-                    event: e
-                  });
+                  // Silently handle image loading errors (often due to IPFS gateway timeouts)
+                  const img = e.target as HTMLImageElement;
+                  if (img.src.includes('gateway.pinata.cloud')) {
+                    // Try fallback to ipfs.io gateway
+                    const ipfsHash = img.src.split('/ipfs/')[1];
+                    if (ipfsHash) {
+                      img.src = `https://ipfs.io/ipfs/${ipfsHash}`;
+                    }
+                  }
                 }}
                 onLoad={() => {
                   console.log('Expanded view image loaded:', currentAlbum.metadata?.image);
@@ -461,6 +477,7 @@ export default function PersistentPlayer() {
                               src={album.metadata.image}
                               alt={getTitle(album.metadata)}
                               fill
+                              sizes="40px"
                               className="object-cover"
                             />
                           </div>

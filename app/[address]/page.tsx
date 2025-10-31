@@ -200,6 +200,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
               src={profile.banner_url!}
               alt="Profile Banner"
               fill
+              sizes="100vw"
               className="object-cover blur-sm scale-110"
             />
           )

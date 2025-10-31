@@ -10,6 +10,7 @@ import UserModal from './UserModal';
 import { User } from 'lucide-react';
 import Image from 'next/image';
 import { getProfile, Profile } from '@/lib/profileApi';
+import { useFullscreenContext } from './FullscreenProvider';
 
 interface GetInButtonProps {
   children?: React.ReactNode;
@@ -18,6 +19,7 @@ interface GetInButtonProps {
 
 export const GetInButton = (buttonProps: GetInButtonProps) => {
   const { children } = buttonProps;
+  const { isFullscreen } = useFullscreenContext();
   const [showUserModal, setShowUserModal] = useState(false);
   const [showGetInModal, setShowGetInModal] = useState(false);
   const [isSessionLoggedIn, setIsSessionLoggedIn] = useState(false);
@@ -89,6 +91,16 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
     }
   }, [isWalletConnected]);
 
+  // Don't render button in fullscreen mode, but keep modals
+  if (isFullscreen) {
+    return (
+      <>
+        {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
+        {showGetInModal && <GetInModal onClose={() => setShowGetInModal(false)} />}
+      </>
+    );
+  }
+
   return (
     <>
   {(isSessionLoggedIn || isWalletConnected || isEncryptedAuthenticated) ? (
@@ -100,9 +112,11 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
             aria-label="Profile"
           >
             {profile?.avatar_cid ? (
-              <img
+              <Image
                 src={`https://ipfs.io/ipfs/${profile.avatar_cid}`}
                 alt="Profile"
+                width={36}
+                height={36}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   // Just show fallback icon on error

@@ -4,7 +4,13 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useMusicPlayer } from './MusicPlayerContext';
 import * as THREE from 'three';
 
-const OrbVisualizer: React.FC = () => {
+interface OrbVisualizerProps {
+  externalAudioData?: Uint8Array | null;
+}
+
+const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ 
+  externalAudioData = null
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const circularCanvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -233,8 +239,17 @@ const OrbVisualizer: React.FC = () => {
       
       ctx.clearRect(0, 0, width, height);
 
-      if (analyserRef.current && frequencyDataRef.current) {
+      // Use external audio data if available, otherwise use internal analyser
+      let currentFrequencyData = frequencyDataRef.current;
+      
+      if (externalAudioData) {
+        currentFrequencyData = new Uint8Array(externalAudioData);
+      } else if (analyserRef.current && frequencyDataRef.current) {
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
+        currentFrequencyData = frequencyDataRef.current;
+      }
+
+      if (currentFrequencyData) {
         
         const numPoints = 180;
         const baseRadius = Math.min(width, height) * 0.4;
@@ -246,24 +261,22 @@ const OrbVisualizer: React.FC = () => {
         ctx.fill();
 
         const numRings = 3;
-        for (let ring = 0; ring < numRings; ring++) {
-          const ringRadius = baseRadius * (0.7 + ring * 0.15);
-          const opacity = 0.8 - ring * 0.2;
-          
-          ctx.beginPath();
-          for (let i = 0; i < numPoints; i++) {
-            const freqRangeStart = Math.floor((ring * frequencyDataRef.current.length) / (numRings * 1.5));
-            const freqRangeEnd = Math.floor(((ring + 1) * frequencyDataRef.current.length) / (numRings * 1.5));
-            const freqRange = freqRangeEnd - freqRangeStart;
+          for (let ring = 0; ring < numRings; ring++) {
+            const ringRadius = baseRadius * (0.7 + ring * 0.15);
+            const opacity = 0.8 - ring * 0.2;
             
-            let sum = 0;
-            const segmentSize = Math.floor(freqRange / numPoints);
-            for (let j = 0; j < segmentSize; j++) {
-              const freqIndex = freqRangeStart + ((i * segmentSize + j) % freqRange);
-              sum += frequencyDataRef.current[freqIndex];
-            }
-            
-            const value = sum / (segmentSize * 255);
+            ctx.beginPath();
+            for (let i = 0; i < numPoints; i++) {
+              const freqRangeStart = Math.floor((ring * currentFrequencyData.length) / (numRings * 1.5));
+              const freqRangeEnd = Math.floor(((ring + 1) * currentFrequencyData.length) / (numRings * 1.5));
+              const freqRange = freqRangeEnd - freqRangeStart;
+              
+              let sum = 0;
+              const segmentSize = Math.floor(freqRange / numPoints);
+              for (let j = 0; j < segmentSize; j++) {
+                const freqIndex = freqRangeStart + ((i * segmentSize + j) % freqRange);
+                sum += currentFrequencyData[freqIndex];
+              }            const value = sum / (segmentSize * 255);
             const adjustedValue = value * (settings.sensitivity / 5) * settings.reactivity;
             const dynamicRadius = ringRadius * (1 + adjustedValue * 0.5);
             
@@ -304,7 +317,7 @@ const OrbVisualizer: React.FC = () => {
     };
 
     drawCircularVisualizer();
-  }, [settings.sensitivity, settings.reactivity]);
+  }, [settings.sensitivity, settings.reactivity, externalAudioData]);
 
   useEffect(() => {
     // Copy containerRef.current early to avoid stale closure
@@ -666,14 +679,28 @@ const OrbVisualizer: React.FC = () => {
       const time = clockRef.current?.getElapsedTime() || 0;
       let audioLevel = 0;
 
-      // Get audio data if available - exact calculation from reference
-      if (analyserRef.current && frequencyDataRef.current) {
+      // Use external audio data if available, otherwise use internal music player data
+      if (externalAudioData) {
+        // Use external audio data for visualizer
+        let sum = 0;
+        for (let i = 0; i < externalAudioData.length; i++) {
+          sum += externalAudioData[i];
+        }
+        audioLevel = ((sum / externalAudioData.length / 255) * settings.sensitivity) / 5;
+        
+        // Also copy external data to frequencyDataRef for circular visualizer
+        if (frequencyDataRef.current && frequencyDataRef.current.length === externalAudioData.length) {
+          frequencyDataRef.current.set(externalAudioData);
+        } else {
+          frequencyDataRef.current = new Uint8Array(externalAudioData);
+        }
+      } else if (analyserRef.current && frequencyDataRef.current) {
+        // Use internal music player audio data
         analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
         let sum = 0;
         for (let i = 0; i < frequencyDataRef.current.length; i++) {
           sum += frequencyDataRef.current[i];
         }
-        // Exact audio level calculation from reference
         audioLevel = ((sum / frequencyDataRef.current.length / 255) * settings.sensitivity) / 5;
       }
 
@@ -747,7 +774,7 @@ const OrbVisualizer: React.FC = () => {
         rendererRef.current.dispose();
       }
     };
-  }, [settings, isInitialized]); // Include dependencies
+  }, [settings, isInitialized, externalAudioData]); // Include dependencies
 
   // Setup audio analysis
   useEffect(() => {

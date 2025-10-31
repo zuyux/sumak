@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import { Providers } from '@/components/ui/provider';
 import { WalletProvider } from '@/components/WalletProvider';
 import { MusicPlayerProvider } from '@/components/MusicPlayerContext';
+import { FullscreenProvider } from '@/components/FullscreenProvider';
 import PersistentPlayer from '@/components/PersistentPlayer';
 import { Toaster } from "@/components/ui/sonner"
 import AppLoadingProvider from "@/components/AppLoadingProvider";
@@ -70,21 +71,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body className={`${inter.variable} ${chakraPetch.variable} ${lacquer.variable} antialiased`}>
         <GlobalErrorHandler />
         <WalletProvider>
           <Providers>
             <MusicPlayerProvider>
-              <AppLoadingProvider>
-                <GetInButton />
-                <Navbar />              
-                <main className="pb-20">
-                  {children}
-                </main>
-                <Footer />
-                <PersistentPlayer />
-              </AppLoadingProvider>
+              <FullscreenProvider>
+                <AppLoadingProvider>
+                  <GetInButton />
+                  <Navbar />              
+                  <main className="pb-20">
+                    {children}
+                  </main>
+                  <Footer />
+                  <PersistentPlayer />
+                </AppLoadingProvider>
+              </FullscreenProvider>
             </MusicPlayerProvider>
           </Providers>
         </WalletProvider>

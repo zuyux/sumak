@@ -6,10 +6,23 @@ import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { SearchModal } from './SearchModal';
 import GetInModal from './GetInModal';
+import { useFullscreenContext } from './FullscreenProvider';
 
 export const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [getInOpen, setGetInOpen] = useState(false);
+  const { isFullscreen } = useFullscreenContext();
+
+  // Don't render navbar in fullscreen mode
+  if (isFullscreen) {
+    return (
+      <>
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+        {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
+      </>
+    );
+  }
+
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 w-full z-50 select-none">
