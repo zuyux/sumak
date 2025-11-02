@@ -294,15 +294,18 @@ export async function POST(request: NextRequest) {
     // Generate URLs for the uploaded files
     const imageUrl = imageIpfsHash ? `https://gateway.pinata.cloud/ipfs/${imageIpfsHash}` : null;
 
-    // Generate complete metadata
-    const completeMetadata = {
-      ...metadata,
-      animation_url: audioUrl,
-      image: imageUrl
-    };
+    // Ensure we have a full metadata object from the frontend
+    if (!metadata || typeof metadata !== 'object') {
+      return NextResponse.json({ error: "Full metadata object required" }, { status: 400 });
+    }
 
-    console.log('Uploading metadata to IPFS...');
-    const metadataResult = await pinata.upload.public.json(completeMetadata);
+  // Overwrite only the image and animation_url fields with IPFS CIDs (not URLs)
+  metadata.image = imageIpfsHash || "";
+  metadata.animation_url = audioCid || "";
+
+    // Upload the full metadata object to IPFS
+    console.log('Uploading full metadata to IPFS:', JSON.stringify(metadata, null, 2));
+    const metadataResult = await pinata.upload.public.json(metadata);
     if (!metadataResult || !metadataResult.IpfsHash) {
       throw new Error("Failed to upload metadata to IPFS");
     }
@@ -361,16 +364,16 @@ export async function POST(request: NextRequest) {
 
     // Return comprehensive response
     return NextResponse.json({
-      success: true,
-      metadataCid,
-      audioUrl,
-      audioCid,
-      imageUrl,
-      imageCid: imageIpfsHash,
-      audioFormat: audioBlob.type.split('/')[1],
-      fileSizeBytes: audioBuffer.byteLength,
-      attributes: completeMetadata.attributes,
-      metadata: completeMetadata
+  success: true,
+  metadataCid,
+  audioUrl,
+  audioCid,
+  imageUrl,
+  imageCid: imageIpfsHash,
+  audioFormat: audioBlob.type.split('/')[1],
+  fileSizeBytes: audioBuffer.byteLength,
+  attributes: metadata.attributes,
+  metadata
     });
 
   } catch (error) {

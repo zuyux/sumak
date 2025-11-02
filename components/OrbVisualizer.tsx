@@ -39,7 +39,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   const dampingFactor = 0.95; // How quickly the inertia decays (0.95 = 5% decay per frame)
   const inertiaMultiplier = 0.8; // How much of the velocity to apply as inertia
   
-  const { audioRef, isPlaying, currentAlbum } = useMusicPlayer();
+  const { audioRef, isPlaying, currentAlbum, setCurrentAlbum } = useMusicPlayer();
   
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -189,11 +189,20 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       particles.forEach((particle) => {
         particle.angle += particle.angleSpeed;
 
-        const orbitX = centerX + Math.cos(particle.angle) * particle.amplitude;
-        const orbitY = centerY + Math.sin(particle.angle) * particle.amplitude;
+        // Add audio reactivity to mesh randomness
+        // Use a global audioLevel from the main animation loop
+        let audioLevel = 0;
+        // @ts-expect-error: using global property for audio reactivity
+        if (window.__orbAudioLevel !== undefined) {
+          // @ts-expect-error: using global property for audio reactivity
+          audioLevel = window.__orbAudioLevel;
+        }
 
-        const noiseX = Math.sin(time * particle.speed + particle.angle) * 5;
-        const noiseY = Math.cos(time * particle.speed + particle.angle * 0.7) * 5;
+        const orbitX = centerX + Math.cos(particle.angle) * particle.amplitude * (1 + audioLevel * 0.5);
+        const orbitY = centerY + Math.sin(particle.angle) * particle.amplitude * (1 + audioLevel * 0.5);
+
+        const noiseX = Math.sin(time * particle.speed + particle.angle) * 5 * (1 + audioLevel * 1.5);
+        const noiseY = Math.cos(time * particle.speed + particle.angle * 0.7) * 5 * (1 + audioLevel * 1.5);
 
         const newX = orbitX + noiseX;
         const newY = orbitY + noiseY;
@@ -201,7 +210,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         particle.element.style.left = newX + 'px';
         particle.element.style.top = newY + 'px';
 
-        const pulseFactor = 1 + Math.sin(time * particle.pulseSpeed + particle.pulsePhase) * 0.3;
+        const pulseFactor = 1 + Math.sin(time * particle.pulseSpeed + particle.pulsePhase) * 0.3 * (1 + audioLevel * 0.7);
         const newSize = particle.size * pulseFactor;
 
         particle.element.style.width = newSize + 'px';
@@ -758,6 +767,10 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         }
       }
 
+      // Expose audioLevel globally for mesh randomness
+      // @ts-expect-error: using global property for audio reactivity
+      window.__orbAudioLevel = audioLevel;
+
       rendererRef.current.render(sceneRef.current, cameraRef.current);
       animationIdRef.current = requestAnimationFrame(animate);
     };
@@ -919,6 +932,67 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
     };
   }, []);
 
+  // Drag-and-drop audio file support
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const files = event.dataTransfer.files;
+    if (files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith('audio/')) return;
+
+    // Create object URL for playback
+    const audioUrl = URL.createObjectURL(file);
+
+    // Fetch metadata using browser APIs
+    const audio = document.createElement('audio');
+    audio.src = audioUrl;
+    audio.onloadedmetadata = () => {
+      const droppedAlbum = {
+        id: `dropped-${Date.now()}`,
+        metadataUrl: '',
+        metadata: {
+          name: file.name,
+          description: '',
+          image: '/SUMAK.png',
+          animation_url: audioUrl,
+          external_url: null,
+          attributes: [],
+          properties: {
+            duration: audio.duration || 0,
+            format: file.type.split('/')[1] || 'mp3',
+            file_size: file.size.toString(),
+            channels: 2,
+            sample_rate: 44100,
+            title: file.name,
+            audio_file: audioUrl,
+          },
+          interoperabilityFormats: [],
+          customizationData: {},
+          edition: null,
+          royalties: null,
+          soulbound: false,
+          location: { lat: 0, lon: 0 },
+        },
+      };
+      setCurrentAlbum(droppedAlbum);
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.load();
+          audioRef.current.play();
+        }
+      }, 100);
+    };
+    audio.load();
+  };
+
+  // Prevent default drag-over behavior
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
     <>
       {/* Three.js container */}
@@ -934,11 +1008,13 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
           top: 0,
           left: 0
         }}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
       />
 
       {/* Interactive orb area overlay */}
       <div 
-        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] z-35 rounded-full transition-all duration-200"
+        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] z-35 rounded-full transition-all duration-200"
         style={{
           cursor: isGrabbing ? 'grabbing' : 'grab',
           pointerEvents: 'auto',
@@ -953,6 +1029,8 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         onTouchStart={handleMouseDown}
         onTouchMove={handleMouseMove}
         onTouchEnd={handleMouseUp}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
       />
 
       {/* Grid overlay */}
@@ -966,17 +1044,17 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
            }} />
 
       {/* Circular visualizer */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] pointer-events-none z-30">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] pointer-events-none z-30">
         <canvas
           ref={circularCanvasRef}
-          width={450}
-          height={450}
+          width={650}
+          height={650}
           className="w-full h-full"
         />
       </div>
 
       {/* Audio wave rings */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] pointer-events-none z-20">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] pointer-events-none z-20">
         <div className="w-full h-full rounded-full border border-red-400/10 relative">
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full h-full rounded-full border border-red-400/5 animate-pulse" 
                style={{ 
@@ -993,13 +1071,12 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       />
 
       {/* Scanner frame - the targeting UI */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-red-400 pointer-events-none z-40  opacity-5 ">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-red-400 pointer-events-none z-40  opacity-5 ">
         {/* Corner markers */}
         <div className="absolute -top-0.5 -left-0.5 w-5 h-5 border-t-2 border-l-2 border-red-400 opacity-5" />
         <div className="absolute -top-0.5 -right-0.5 w-5 h-5 border-t-2 border-r-2 border-red-400 opacity-5" />
         <div className="absolute -bottom-0.5 -left-0.5 w-5 h-5 border-b-2 border-l-2 border-red-400 opacity-5" />
         <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 border-b-2 border-r-2 border-red-400 opacity-5" />
-
       </div>
 
 

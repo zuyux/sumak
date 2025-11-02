@@ -221,30 +221,32 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Utility function to convert any IPFS gateway URL to ipfs.io with fallbacks
+  // Utility function to convert any IPFS gateway URL or CID to ipfs.io
   const convertToIpfsIo = useCallback((url: string): string => {
     if (!url) return url;
-    
+    // If it's already a valid https URL, use as-is
+    if (url.startsWith('https://')) return url;
+    // If it's a CID (46+ chars, alphanumeric), build the ipfs.io URL
+    if (/^[a-zA-Z0-9]{46,}$/.test(url)) {
+      console.log(`No IPFS pattern found in URL: ${url}`);
+      return `https://ipfs.io/ipfs/${url}`;
+    }
     // Match IPFS CID patterns in URLs
     const ipfsPatterns = [
       /\/ipfs\/([a-zA-Z0-9]+)/,  // Standard /ipfs/CID pattern
       /^ipfs:\/\/([a-zA-Z0-9]+)/, // ipfs:// protocol
       /\/([a-zA-Z0-9]{46,})$/     // Just the CID at the end
     ];
-    
     for (const pattern of ipfsPatterns) {
       const match = url.match(pattern);
       if (match && match[1]) {
         const cid = match[1];
-        // Always use ipfs.io as primary gateway for better reliability
         const finalUrl = `https://ipfs.io/ipfs/${cid}`;
         console.log(`Converting IPFS URL: ${url} -> ${finalUrl}`);
         return finalUrl;
       }
     }
-    
     // If no IPFS pattern found, return original URL
-    console.log(`No IPFS pattern found in URL: ${url}`);
     return url;
   }, []);
 
@@ -328,13 +330,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         console.log('Using NFT albums with existing metadata');
         setAlbumsWithMetadata(nftAlbums);
         
-        // Set current album to first album with metadata
-        const firstAlbumWithMetadata = nftAlbums.find((album: Album) => album.metadata);
-        if (firstAlbumWithMetadata?.metadata) {
-          console.log(`Setting current album to: ${firstAlbumWithMetadata.metadata.name}`);
-          setCurrentAlbumState(firstAlbumWithMetadata);
-          setDuration(firstAlbumWithMetadata.metadata.properties.duration);
-        }
+          // Set current album to a random album with metadata
+          const albumsWithMeta = nftAlbums.filter((album: Album) => album.metadata);
+          if (albumsWithMeta.length > 0) {
+            const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
+            const randomAlbum = albumsWithMeta[randomIndex];
+            if (randomAlbum.metadata) {
+              console.log(`Setting current album to: ${randomAlbum.metadata.name}`);
+              setCurrentAlbumState(randomAlbum);
+              setDuration(randomAlbum.metadata.properties.duration);
+            }
+          }
         return;
       }
       
@@ -355,13 +361,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       
       setAlbumsWithMetadata(albumsWithLoadedMetadata);
       
-      // Set current album to first album with loaded metadata
-      const firstAlbumWithMetadata = albumsWithLoadedMetadata.find((album: Album) => album.metadata);
-      if (firstAlbumWithMetadata?.metadata) {
-        console.log(`Setting current album to: ${firstAlbumWithMetadata.metadata.name}`);
-        setCurrentAlbumState(firstAlbumWithMetadata);
-        setDuration(firstAlbumWithMetadata.metadata.properties.duration);
-      }
+        // Set current album to a random album with loaded metadata
+        const albumsWithMeta = albumsWithLoadedMetadata.filter((album: Album) => album.metadata);
+        if (albumsWithMeta.length > 0) {
+          const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
+          const randomAlbum = albumsWithMeta[randomIndex];
+          if (randomAlbum.metadata) {
+            console.log(`Setting current album to: ${randomAlbum.metadata.name}`);
+            setCurrentAlbumState(randomAlbum);
+            setDuration(randomAlbum.metadata.properties.duration);
+          }
+        }
     } catch (error) {
       console.error('Error loading music data:', error);
       // On error, try to load fallback albums
@@ -375,12 +385,16 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       );
       setAlbumsWithMetadata(albumsWithLoadedMetadata);
       
-      const firstAlbumWithMetadata = albumsWithLoadedMetadata.find((album: Album) => album.metadata);
-      if (firstAlbumWithMetadata?.metadata) {
-        console.log(`Setting fallback current album to: ${firstAlbumWithMetadata.metadata.name}`);
-        setCurrentAlbumState(firstAlbumWithMetadata);
-        setDuration(firstAlbumWithMetadata.metadata.properties.duration);
-      }
+        const albumsWithMeta = albumsWithLoadedMetadata.filter((album: Album) => album.metadata);
+        if (albumsWithMeta.length > 0) {
+          const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
+          const randomAlbum = albumsWithMeta[randomIndex];
+          if (randomAlbum.metadata) {
+            console.log(`Setting fallback current album to: ${randomAlbum.metadata.name}`);
+            setCurrentAlbumState(randomAlbum);
+            setDuration(randomAlbum.metadata.properties.duration);
+          }
+        }
     } finally {
       setIsLoading(false);
       console.log('Finished loading metadata');

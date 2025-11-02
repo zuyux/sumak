@@ -1,11 +1,14 @@
+
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { Skeleton } from './ui/skeleton';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMusicPlayer } from './MusicPlayerContext';
 import { useFullscreenContext } from './FullscreenProvider';
+import { useIsMobile } from '../hooks/use-mobile';
 
 export default function PersistentPlayer() {
   const router = useRouter();
@@ -32,20 +35,26 @@ export default function PersistentPlayer() {
 
   const [imageError, setImageError] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+    const isMobile = useIsMobile();
 
   // Reset image error when album changes
   useEffect(() => {
     setImageError(false);
+    setImageLoading(true);
   }, [currentAlbum?.metadata?.image]);
 
   const handleImageError = () => {
-    console.log('PersistentPlayer image failed to load, using fallback');
-    setImageError(true);
+  console.log('PersistentPlayer image failed to load, using fallback');
+  setImageError(true);
+  setImageLoading(false);
   };
 
   const handleImageLoad = () => {
-    console.log('PersistentPlayer image loaded successfully');
-    setImageError(false);
+  console.log('PersistentPlayer image loaded successfully');
+  setImageError(false);
+  setImageLoading(false);
   };
   const [localVolume, setLocalVolume] = useState(volume);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -203,7 +212,7 @@ export default function PersistentPlayer() {
     }`}>
       {/* Collapsed view - Grid layout similar to Spotify */}
       {!isExpanded && (
-        <div className="grid grid-cols-3 items-center px-0 py-0 h-20 gap-4">
+  <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2">
           {/* Left section - Song info (1/3 width) */}
           <div 
             className={`flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-all duration-300 ${
@@ -215,6 +224,9 @@ export default function PersistentPlayer() {
             <div className={`w-20 h-20 relative rounded overflow-hidden flex-shrink-0 transition-all duration-300 ${
               isTransitioning ? 'ring-2 ring-primary/50' : ''
             }`}>
+              {imageLoading && (
+                <Skeleton className="absolute inset-0 w-full h-full z-10" />
+              )}
               {currentAlbum?.metadata?.image ? (
                 <Image
                   src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
@@ -234,92 +246,115 @@ export default function PersistentPlayer() {
                   sizes="80px"
                   priority
                   className="object-cover"
+                  onLoad={handleImageLoad}
                 />
               )}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground truncate">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <p
+                className="text-sm font-medium text-foreground truncate w-full block"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}
+                title={getTitle(currentAlbum.metadata)}
+              >
                 {getTitle(currentAlbum.metadata)}
               </p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p
+                className="text-xs text-muted-foreground truncate w-full block"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}
+                title={getArtist(currentAlbum.metadata)}
+              >
                 {getArtist(currentAlbum.metadata)}
               </p>
               {isTransitioning && (
-                <p className="text-xs text-primary animate-pulse">
-                  🎨 Background updating...
-                </p>
+                <p className="text-xs text-primary animate-pulse">...</p>
               )}
             </div>
           </div>
 
           {/* Center section - Controls (1/3 width) */}
           <div className="flex flex-col items-center space-y-2">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handlePreviousTrack}
-                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                  isTransitioning ? 'scale-110 text-primary' : ''
-                }`}
-                title="Previous track (will update background)"
-              >
-                <SkipBack size={16} />
-              </button>
-              
+            <div className="flex items-center justify-center w-full">
+              {!isMobile && (
+                <button
+                  onClick={handlePreviousTrack}
+                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer mr-4 ${
+                    isTransitioning ? 'scale-110 text-primary' : ''
+                  }`}
+                  title="Previous track (will update background)"
+                >
+                  <SkipBack size={16} />
+                </button>
+              )}
               <button
                 onClick={togglePlayPause}
                 className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? <Pause size={14} /> : <Play size={14} />}
               </button>
-              
-              <button
-                onClick={handleNextTrack}
-                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                  isTransitioning ? 'scale-110 text-primary' : ''
-                }`}
-                title="Next track (will update background)"
-              >
-                <SkipForward size={16} />
-              </button>
+              {!isMobile && (
+                <button
+                  onClick={handleNextTrack}
+                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ml-4 ${
+                    isTransitioning ? 'scale-110 text-primary' : ''
+                  }`}
+                  title="Next track (will update background)"
+                >
+                  <SkipForward size={16} />
+                </button>
+              )}
             </div>
-            {/* Progress bar */}
-            <div className="w-full flex items-center space-x-2">
-              <span className="text-xs text-muted-foreground min-w-[30px] text-right">
-                {formatTime(currentTime)}
-              </span>
-              <div
-                className="flex-1 h-1 bg-muted rounded-full cursor-pointer"
-                onClick={handleTimelineClick}
-              >
+            {!isMobile && (
+              <div className="w-full flex items-center space-x-2">
+                <span className="text-xs text-muted-foreground min-w-[30px] text-right">
+                  {formatTime(currentTime)}
+                </span>
                 <div
-                  className="h-full bg-foreground rounded-full transition-all duration-100"
-                  style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                />
+                  className="flex-1 h-1 bg-muted rounded-full cursor-pointer"
+                  onClick={handleTimelineClick}
+                >
+                  <div
+                    className="h-full bg-foreground rounded-full transition-all duration-100"
+                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground min-w-[30px]">
+                  {formatTime(duration)}
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground min-w-[30px]">
-                {formatTime(duration)}
-              </span>
-            </div>
+            )}
           </div>
 
           {/* Right section - Volume and expand (1/3 width) */}
           <div className="flex items-center justify-end space-x-3">
-            <div className="flex items-center space-x-2">
-              <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={localVolume}
-                onChange={handleVolumeChange}
-                className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
-                style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
-              />
-            </div>
+            {!isMobile && (
+              <div className="flex items-center space-x-2">
+                <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={localVolume}
+                  onChange={handleVolumeChange}
+                  className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
+                  style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
+                />
+              </div>
+            )}
             <button
               onClick={() => setIsExpanded(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer mx-4"
+              className="text-muted-foreground hover:bg-[#111] hover:text-foreground transition-colors rounded-md cursor-pointer px-4 py-6 mr-2"
             >
               <ChevronUp size={16} />
             </button>
@@ -329,13 +364,13 @@ export default function PersistentPlayer() {
 
       {/* Expanded view */}
       {isExpanded && (
-        <div className="p-6 space-y-6">
+        <div className="p-2 space-y-2">
           {/* Header with collapse button */}
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Now Playing</h3>
             <button
               onClick={() => setIsExpanded(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer mx-4"
+              className="text-muted-foreground hover:bg-[#111] hover:text-foreground transition-colors rounded-md cursor-pointer px-4 py-6"
             >
               <ChevronDown size={20} />
             </button>
@@ -348,6 +383,9 @@ export default function PersistentPlayer() {
             title="View NFT details"
           >
             <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
+              {imageLoading && (
+                <Skeleton className="absolute inset-0 w-full h-full z-10" />
+              )}
               <Image
                 src={currentAlbum.metadata.image}
                 alt={getTitle(currentAlbum.metadata)}
@@ -365,17 +403,37 @@ export default function PersistentPlayer() {
                       img.src = `https://ipfs.io/ipfs/${ipfsHash}`;
                     }
                   }
+                  setImageLoading(false);
                 }}
                 onLoad={() => {
+                  setImageLoading(false);
                   console.log('Expanded view image loaded:', currentAlbum.metadata?.image);
                 }}
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <h4 className="text-lg font-medium text-foreground truncate">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <h4
+                className="text-lg font-medium text-foreground truncate w-full block"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}
+                title={getTitle(currentAlbum.metadata)}
+              >
                 {getTitle(currentAlbum.metadata)}
               </h4>
-              <p className="text-muted-foreground truncate">
+              <p
+                className="text-muted-foreground truncate w-full block"
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%'
+                }}
+                title={getArtist(currentAlbum.metadata)}
+              >
                 {getArtist(currentAlbum.metadata)}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -407,52 +465,54 @@ export default function PersistentPlayer() {
             </div>
 
             {/* Center - Main controls */}
-            <div className="flex items-center justify-center space-x-4">
-              <button
-                onClick={handlePreviousTrack}
-                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                  isTransitioning ? 'scale-110 text-primary' : ''
-                }`}
-                title="Previous track (will update background)"
-              >
-                <SkipBack size={24} />
-              </button>
-              
-              <button
-                onClick={togglePlayPause}
-                className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-primary/90 transition-colors cursor-pointer"
-              >
-                {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-              </button>
-              
-              <button
-                onClick={handleNextTrack}
-                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                  isTransitioning ? 'scale-110 text-primary' : ''
-                }`}
-                title="Next track (will update background)"
-              >
-                <SkipForward size={24} />
-              </button>
-            </div>
+            {!isMobile && (
+              <div className="flex items-center justify-center space-x-4">
+                <button
+                  onClick={handlePreviousTrack}
+                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                    isTransitioning ? 'scale-110 text-primary' : ''
+                  }`}
+                  title="Previous track (will update background)"
+                >
+                  <SkipBack size={24} />
+                </button>
+                <button
+                  onClick={togglePlayPause}
+                  className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                </button>
+                <button
+                  onClick={handleNextTrack}
+                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                    isTransitioning ? 'scale-110 text-primary' : ''
+                  }`}
+                  title="Next track (will update background)"
+                >
+                  <SkipForward size={24} />
+                </button>
+              </div>
+            )}
 
             {/* Right - Volume */}
-            <div className="flex items-center justify-end space-x-2">
-              <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={localVolume}
-                onChange={handleVolumeChange}
-                className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
-                style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
-              />
-              <span className="text-xs text-muted-foreground w-8 text-right">
-                {Math.round(localVolume * 100)}
-              </span>
-            </div>
+            {!isMobile && (
+              <div className="flex items-center justify-end space-x-2">
+                <Volume2 size={16} className="text-muted-foreground pointer-events-none" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={localVolume}
+                  onChange={handleVolumeChange}
+                  className="w-20 h-2 bg-white rounded-lg appearance-none cursor-pointer slider"
+                  style={{ '--volume-percentage': localVolume * 100 } as React.CSSProperties}
+                />
+                <span className="text-xs text-muted-foreground w-8 text-right">
+                  {Math.round(localVolume * 100)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Playlist section */}
@@ -466,7 +526,7 @@ export default function PersistentPlayer() {
                       onClick={() => setCurrentAlbum(album)}
                       className={`flex-1 p-3 rounded-l-lg transition-colors text-left hover:bg-muted/50 cursor-pointer ${
                         currentAlbum?.id === album.id
-                          ? 'bg-primary/20 border border-primary/40 border-r-0'
+                          ? 'bg-background/20 border border-primary/40 border-r-0'
                           : 'bg-transparent border border-transparent border-r-0'
                       }`}
                     >

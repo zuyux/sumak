@@ -4,8 +4,6 @@ import Footer from '@/components/Footer';
 import { Navbar } from '@/components/Navbar';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import OrbVisualizer from '@/components/OrbVisualizer';
-// ...existing code...
-// ...existing code...
 import Image from 'next/image';
 import { useRef, useEffect, useCallback, useState } from 'react';
 
@@ -13,10 +11,7 @@ export default function Page() {
   const {
     currentAlbum,
     isPlaying,
-    currentTime,
-    duration,
     isLoading,
-    seekTo,
   } = useMusicPlayer();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,13 +23,6 @@ export default function Page() {
   useEffect(() => {
     setBackgroundImageLoaded(false); // Reset load state when album changes
   }, [currentAlbum?.id, currentAlbum?.metadata]);
-
-  // Format time from seconds to mm:ss
-  const formatTime = (time: number) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   // Visualizer animation function
   const drawVisualizer = useCallback(() => {
@@ -114,15 +102,6 @@ export default function Page() {
     };
   }, []);
 
-  // Handle canvas click for seeking
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newTime = (clickX / rect.width) * duration;
-    seekTo(newTime);
-  };
-
-
 
   return (
     <div className="bg-transparent min-h-screen">
@@ -191,23 +170,6 @@ export default function Page() {
         )}
 
         <OrbVisualizer />
-
-        {/* Audio Visualizer Timeline */}
-        <div className="fixed bottom-20 md:bottom-6 left-0 right-0 mb-6">
-          <div className="flex flex-col items-center mb-2">
-            <canvas
-              ref={canvasRef}
-              height={60}
-              className="w-full h-12 md:h-16 bg-transparent"
-              onClick={handleCanvasClick}
-              style={{ cursor: 'pointer' }}
-            />
-          </div>
-          <div className="flex justify-between px-2 md:px-4 text-xs md:text-sm text-muted-foreground mt-2">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-        </div>
     </div>
 
       <Footer />

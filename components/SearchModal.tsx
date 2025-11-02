@@ -348,10 +348,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all duration-200 text-sm ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all duration-200 text-sm cursor-pointer ${
                     activeTab === tab.id
-                      ? 'bg-gray-800/80 text-white'
-                      : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/50'
+                      ? 'bg-muted-foreground/20 text-white'
+                      : 'text-gray-400 hover:text-gray-300 hover:bg-muted-foreground/20'
                   }`}
                 >
                   <Icon size={14} />

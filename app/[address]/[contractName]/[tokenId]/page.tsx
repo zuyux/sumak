@@ -129,21 +129,23 @@ export default function NFTDetailPage() {
   // Function to fetch NFT data from database
   const fetchNFTFromDatabase = useCallback(async () => {
     if (!address || !contractName || !tokenId) return null;
-    
     try {
-      const { data, error } = await supabaseAdmin
+      // Use maybeSingle() to avoid 406 error when no rows
+      const { data, error, status } = await supabaseAdmin
         .from('nfts')
         .select('*')
         .eq('contract_address', address)
         .eq('contract_name', contractName)
         .eq('token_id', parseInt(tokenId))
-        .single();
-      
+        .maybeSingle();
       if (error) {
+        if (status === 406) {
+          // No rows found, not an error
+          return null;
+        }
         console.warn('Could not fetch NFT from database:', error);
         return null;
       }
-      
       return data;
     } catch (err) {
       console.error('Error fetching NFT from database:', err);
@@ -159,21 +161,25 @@ export default function NFTDetailPage() {
       setIsLoading(true);
       
       // Check listing status from database instead of contract
-      const { data, error } = await supabaseAdmin
+      const { data, error, status } = await supabaseAdmin
         .from('nfts')
         .select('is_listed, list_price, list_currency')
         .eq('contract_address', address)
         .eq('contract_name', contractName)
         .eq('token_id', parseInt(tokenId))
-        .single();
-      
+        .maybeSingle();
       if (error) {
+        if (status === 406) {
+          // No rows found, not an error
+          setIsListed(false);
+          setListingPrice(null);
+          return;
+        }
         console.warn('Could not fetch listing status from database:', error);
         setIsListed(false);
         setListingPrice(null);
         return;
       }
-      
       if (data) {
         setIsListed(data.is_listed || false);
         setListingPrice(data.list_price || null);
@@ -348,13 +354,16 @@ export default function NFTDetailPage() {
       }
 
       // Check price from database
-      const { data: nftData } = await supabaseAdmin
+      const { data: nftData, error, status } = await supabaseAdmin
         .from('nfts')
         .select('is_listed, list_price, list_currency')
         .eq('contract_address', address)
         .eq('contract_name', contractName)
         .eq('token_id', parseInt(tokenId))
-        .single();
+        .maybeSingle();
+      if (error && status !== 406) {
+        console.warn('Could not fetch NFT price from database:', error);
+      }
 
       // Fallback to default pricing if needed
       const stxPriceUsd = await fetchStxPrice();
@@ -408,63 +417,36 @@ export default function NFTDetailPage() {
           if (contractData.success && contractData.metadataCid) {
             // Fetch metadata from IPFS using ipfs.io gateway
             const metadataUrl = `https://ipfs.io/ipfs/${contractData.metadataCid}`;
-
             const response = await fetch(metadataUrl);
-
             if (response.ok) {
               const nftData: TokenMetadata = await response.json();
               setMetadata(nftData);
-
               // Set audio URL from audio_url or animation_url field
               let audioSrc = '';
               if (nftData.audio_url) {
-                audioSrc = nftData.audio_url;
+                audioSrc = resolveIpfsUrl(nftData.audio_url);
               } else if (nftData.animation_url) {
-                audioSrc = nftData.animation_url;
+                audioSrc = resolveIpfsUrl(nftData.animation_url);
               }
-              
-              // Convert IPFS URLs to use ipfs.io gateway
               if (audioSrc) {
-                if (audioSrc.startsWith('ipfs://')) {
-                  audioSrc = audioSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                } else if (audioSrc.includes('gateway.pinata.cloud')) {
-                  // Replace Pinata gateway with ipfs.io
-                  audioSrc = audioSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
-                }
                 setAudioUrl(audioSrc);
               }
-
               // Set cover image URL - prioritize database image_cid, then image_url, then metadata image
               let imageSrc = '';
-              
-              // First try to get image from database
               const dbNftData = await fetchNFTFromDatabase();
               if (dbNftData?.image_cid) {
-                imageSrc = `https://ipfs.io/ipfs/${dbNftData.image_cid}`;
+                imageSrc = resolveIpfsUrl(dbNftData.image_cid);
                 console.log('Using cover image from database image_cid:', imageSrc);
               } else if (dbNftData?.image_url) {
-                imageSrc = dbNftData.image_url;
-                if (imageSrc.startsWith('ipfs://')) {
-                  imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                } else if (imageSrc.includes('gateway.pinata.cloud')) {
-                  imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
-                }
+                imageSrc = resolveIpfsUrl(dbNftData.image_url);
                 console.log('Using cover image from database image_url:', imageSrc);
               } else if (nftData && nftData.image) {
-                // Fallback to metadata image
-                imageSrc = nftData.image;
-                if (imageSrc.startsWith('ipfs://')) {
-                  imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                } else if (imageSrc.includes('gateway.pinata.cloud')) {
-                  imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
-                }
+                imageSrc = resolveIpfsUrl(nftData.image);
                 console.log('Using cover image from metadata fallback:', imageSrc);
               }
-              
               if (imageSrc) {
                 setCoverImageUrl(imageSrc);
               }
-
               // If not already cached, fetch and cache the audio file for offline playback
               if (audioSrc && !audioBlobUrlRef.current) {
                 try {
@@ -490,6 +472,7 @@ export default function NFTDetailPage() {
             }
           }
         } else {
+          // Backend 500 error: check if /api/stacks-proxy/extended/v1/contract is running and accessible
           // Fallback to direct contract query if API fails
           const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
           const network = networkEnv === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
@@ -528,30 +511,20 @@ export default function NFTDetailPage() {
                 // Set audio URL from audio_url or animation_url field
                 let audioSrc = '';
                 if (res.data.audio_url) {
-                  audioSrc = res.data.audio_url;
+                  audioSrc = resolveIpfsUrl(res.data.audio_url);
                 } else if (res.data.animation_url) {
-                  audioSrc = res.data.animation_url;
+                  audioSrc = resolveIpfsUrl(res.data.animation_url);
                 }
                 
                 // Convert IPFS URLs to use ipfs.io gateway
                 if (audioSrc) {
-                  if (audioSrc.startsWith('ipfs://')) {
-                    audioSrc = audioSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (audioSrc.includes('gateway.pinata.cloud')) {
-                    audioSrc = audioSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
-                  }
                   setAudioUrl(audioSrc);
                 }
 
                 // Set cover image URL
                 let imageSrc = '';
                 if (res.data.image) {
-                  imageSrc = res.data.image;
-                  if (imageSrc.startsWith('ipfs://')) {
-                    imageSrc = imageSrc.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (imageSrc.includes('gateway.pinata.cloud')) {
-                    imageSrc = imageSrc.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
-                  }
+                  imageSrc = resolveIpfsUrl(res.data.image);
                   setCoverImageUrl(imageSrc);
                 }
 
@@ -660,6 +633,28 @@ export default function NFTDetailPage() {
     };
     fetchCreatorData();
   }, [deployerAddress, address, tokenId]);
+
+  // Utility to resolve IPFS URLs and CIDs to gateway URLs
+  function resolveIpfsUrl(val: string): string {
+    if (!val) return '';
+    if (typeof val !== 'string') return '';
+    if (val.startsWith('https://')) {
+      return val;
+    }
+    // If it's a string but not a URL, treat as CID
+    if (val.match(/^[A-Za-z0-9]{46,}$/)) {
+      // Log for debugging: No IPFS pattern found, treating as CID
+      console.log(`No IPFS pattern found in URL: ${val}`);
+      return `https://ipfs.io/ipfs/${val}`;
+    }
+    if (val.startsWith('ipfs://')) {
+      return val.replace('ipfs://', 'https://ipfs.io/ipfs/');
+    }
+    if (val.includes('gateway.pinata.cloud')) {
+      return val.replace('https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/');
+    }
+    return val;
+  }
 
   if (loading) {
     return (
@@ -1387,6 +1382,7 @@ export default function NFTDetailPage() {
                       fill
                       sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 16vw"
                       className="object-cover rounded-lg" 
+                      // If you see a preload warning, ensure this image is used immediately after preloading
                     />
                   ) : (
                     <span className="text-white">{nft.name || 'Audio NFT'}</span>
