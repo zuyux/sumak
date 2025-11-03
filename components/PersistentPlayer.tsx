@@ -205,14 +205,26 @@ export default function PersistentPlayer() {
   }
 
   return (
-    <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 ${
-      isFullscreen 
-        ? 'bg-background/20 backdrop-blur-xl' 
-        : 'bg-background/95 backdrop-blur-md'
-    }`}>
-      {/* Collapsed view - Grid layout similar to Spotify */}
-      {!isExpanded && (
-  <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2">
+    <>
+      {/* Mobile: Title & Artist above persistent player */}
+      {isMobile && !isExpanded && (
+  <div className="fixed bottom-20 left-0 right-0 z-50 flex flex-col items-center justify-center bg-transparent py-2 px-4" style={{ fontFamily: 'Chakra Petch, var(--font-chakra-petch), sans-serif' }}>
+          <span className="text-base font-bold title text-center truncate w-full" title={getTitle(currentAlbum.metadata)}>
+            {getTitle(currentAlbum.metadata)}
+          </span>
+          <span className="text-xs font-medium title text-center text-white/50 truncate w-full" title={getArtist(currentAlbum.metadata)}>
+            {getArtist(currentAlbum.metadata)}
+          </span>
+        </div>
+      )}
+      <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 ${
+        isFullscreen 
+          ? 'bg-background/20 backdrop-blur-xl' 
+          : 'bg-background/95 backdrop-blur-md'
+      }`}>
+        {/* Collapsed view - Grid layout similar to Spotify */}
+        {!isExpanded && (
+          <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2">
           {/* Left section - Song info (1/3 width) */}
           <div 
             className={`flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-all duration-300 ${
@@ -251,30 +263,34 @@ export default function PersistentPlayer() {
               )}
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <p
-                className="text-sm font-medium text-foreground truncate w-full block"
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-                title={getTitle(currentAlbum.metadata)}
-              >
-                {getTitle(currentAlbum.metadata)}
-              </p>
-              <p
-                className="text-xs text-muted-foreground truncate w-full block"
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-                title={getArtist(currentAlbum.metadata)}
-              >
-                {getArtist(currentAlbum.metadata)}
-              </p>
+              {!isMobile && (
+                <>
+                  <p
+                    className="text-sm font-medium text-foreground truncate w-full block"
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%'
+                    }}
+                    title={getTitle(currentAlbum.metadata)}
+                  >
+                    {getTitle(currentAlbum.metadata)}
+                  </p>
+                  <p
+                    className="text-xs text-muted-foreground truncate w-full block"
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%'
+                    }}
+                    title={getArtist(currentAlbum.metadata)}
+                  >
+                    {getArtist(currentAlbum.metadata)}
+                  </p>
+                </>
+              )}
               {isTransitioning && (
                 <p className="text-xs text-primary animate-pulse">...</p>
               )}
@@ -412,30 +428,32 @@ export default function PersistentPlayer() {
               />
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <h4
-                className="text-lg font-medium text-foreground truncate w-full block"
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-                title={getTitle(currentAlbum.metadata)}
-              >
-                {getTitle(currentAlbum.metadata)}
-              </h4>
-              <p
-                className="text-muted-foreground truncate w-full block"
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-                title={getArtist(currentAlbum.metadata)}
-              >
-                {getArtist(currentAlbum.metadata)}
-              </p>
+              <>
+                <h4
+                  className="text-lg font-medium text-foreground truncate w-full block"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%'
+                  }}
+                  title={getTitle(currentAlbum.metadata)}
+                >
+                  {getTitle(currentAlbum.metadata)}
+                </h4>
+                <p
+                  className="text-muted-foreground truncate w-full block"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%'
+                  }}
+                  title={getArtist(currentAlbum.metadata)}
+                >
+                  {getArtist(currentAlbum.metadata)}
+                </p>
+              </>
               <p className="text-sm text-muted-foreground">
                 {getGenre(currentAlbum.metadata)}{getYear(currentAlbum.metadata) && ` • ${getYear(currentAlbum.metadata)}`}
               </p>
@@ -640,5 +658,6 @@ export default function PersistentPlayer() {
         }
       `}</style>
     </div>
+    </>
   );
 }

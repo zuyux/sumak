@@ -1,5 +1,7 @@
 # SUMAK SOUNDS — Web3 Music NFT Platform
 
+![SUMAK](./public/sumak-banner.png)
+
 SUMAK is a decentralized music NFT marketplace built on the Stacks blockchain that enables artists to mint, trade, and showcase music NFTs with full ownership control and royalty management.
 
 Contrato: [https://explorer.hiro.so/txid/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ](https://explorer.hiro.so/txid/ST193GXQTNHVV9WSAPHAB89M6R9QSEXZKS3N9P3DZ.shakedown-1761419817658?chain=testnet)
