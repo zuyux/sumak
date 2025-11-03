@@ -63,6 +63,29 @@ export const metadata: Metadata = {
     email: false,
     url: false,
   },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://sumak.app',
+    siteName: 'SUMAK',
+    title: 'SUMAK - SOUNDS & SATS ⚡',
+    description: 'MINT & EXCHANGE UR SOUNDS',
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'SUMAK - SOUNDS & SATS',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SUMAK - SOUNDS & SATS ⚡',
+    description: 'MINT & EXCHANGE UR SOUNDS',
+    images: ['/twitter-image.jpg'],
+    creator: '@sumak',
+  },
 };
 
 export default function RootLayout({
