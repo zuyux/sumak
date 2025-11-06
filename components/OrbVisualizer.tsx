@@ -21,9 +21,14 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const anomalyObjectRef = useRef<THREE.Group | null>(null);
   const animationIdRef = useRef<number | null>(null);
-  const frequencyDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const frequencyDataRef = useRef<Uint8Array | null>(null);
   const clockRef = useRef<THREE.Clock | null>(null);
   const floatingParticlesRef = useRef<HTMLDivElement>(null);
+  // Smoothed audio band state for gentler mesh distortion
+  const prevAudioLowRef = useRef<number>(0);
+  const prevAudioMidRef = useRef<number>(0);
+  const prevAudioHighRef = useRef<number>(0);
+  const audioSmoothing = 0.08; // lerp factor (0..1) lower = smoother
   
   // Mouse/touch interaction states
   const mouseRef = useRef({ x: 0, y: 0 });
@@ -37,7 +42,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   const velocityRef = useRef({ x: 0, y: 0 });
   const lastTimeRef = useRef(0);
   const dampingFactor = 0.95; // How quickly the inertia decays (0.95 = 5% decay per frame)
-  const inertiaMultiplier = 0.8; // How much of the velocity to apply as inertia
+  const inertiaMultiplier = 0.1; // How much of the velocity to apply as inertia
   
   const { audioRef, isPlaying, currentAlbum, setCurrentAlbum } = useMusicPlayer();
   
@@ -153,7 +158,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
       // Create hollow area in center
       const minDistance = 200;
-      const maxDistance = Math.max(windowWidth, windowHeight) * 0.8;
+      const maxDistance = Math.max(windowWidth, windowHeight) * 0.5;
       const angle = Math.random() * Math.PI * 2;
       const distanceFactor = Math.sqrt(Math.random());
       const distance = minDistance + distanceFactor * (maxDistance - minDistance);
@@ -254,7 +259,10 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       if (externalAudioData) {
         currentFrequencyData = new Uint8Array(externalAudioData);
       } else if (analyserRef.current && frequencyDataRef.current) {
-        analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
+        // Read into a local buffer and copy to avoid TS ArrayBuffer typing mismatch
+        const buf = new Uint8Array(frequencyDataRef.current.length);
+        analyserRef.current.getByteFrequencyData(buf);
+        frequencyDataRef.current.set(buf);
         currentFrequencyData = frequencyDataRef.current;
       }
 
@@ -414,25 +422,31 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
     const createAnomalyObject = (scene: THREE.Scene) => {
       const anomalyObject = new THREE.Group();
-      const radius = 2;
+      const radius = 2.7;
 
       // Outer geometry with exact resolution calculation from reference
       const outerGeometry = new THREE.IcosahedronGeometry(
         radius,
-        Math.max(1, Math.floor(settings.resolution / 8))
+        Math.max(1, Math.floor(settings.resolution / 4))
       );
 
       // Main orb material - exact copy from reference with our settings
-      const outerMaterial = new THREE.ShaderMaterial({
+        const outerMaterial = new THREE.ShaderMaterial({
         uniforms: {
           time: { value: 0 },
           color: { value: new THREE.Color(0xff4e42) },
           audioLevel: { value: 0 },
+          audioLow: { value: 0 },
+          audioMid: { value: 0 },
+          audioHigh: { value: 0 },
           distortion: { value: settings.distortion }
         },
         vertexShader: `
           uniform float time;
           uniform float audioLevel;
+          uniform float audioLow;
+          uniform float audioMid;
+          uniform float audioHigh;
           uniform float distortion;
           varying vec3 vNormal;
           varying vec3 vPosition;
@@ -505,11 +519,15 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
           void main() {
             vNormal = normalize(normalMatrix * normal);
             
-            float slowTime = time * 0.3;
+            float slowTime = time * 0.2;
             vec3 pos = position;
             
             float noise = snoise(vec3(position.x * 0.5, position.y * 0.5, position.z * 0.5 + slowTime));
-            pos += normal * noise * 0.2 * distortion * (1.0 + audioLevel);
+
+            // Combine band energies to create a more interesting but smoother displacement
+            float bandInfluence = audioLow * 0.9 + audioMid * 0.6 + audioHigh * 0.4;
+            // Reduce raw noise amplitude and weight audio contribution to be gentler
+            pos += normal * noise * 0.12 * distortion * (1.0 + audioLevel * 0.7 + bandInfluence * 1.2);
             
             vPosition = pos;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -549,16 +567,23 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         uniforms: {
           time: { value: 0 },
           color: { value: new THREE.Color(0xff4e42) },
-          audioLevel: { value: 0 }
+          audioLevel: { value: 0 },
+          audioLow: { value: 0 },
+          audioMid: { value: 0 },
+          audioHigh: { value: 0 }
         },
         vertexShader: `
           varying vec3 vNormal;
           varying vec3 vPosition;
           uniform float audioLevel;
+          uniform float audioLow;
+          uniform float audioMid;
+          uniform float audioHigh;
           
           void main() {
             vNormal = normalize(normalMatrix * normal);
-            vPosition = position * (1.0 + audioLevel * 0.2);
+            // Subtle expansion based on low-band energy to give bass breathing
+            vPosition = position * (1.0 + audioLevel * 0.2 + audioLow * 0.08);
             gl_Position = projectionMatrix * modelViewMatrix * vec4(vPosition, 1.0);
           }
         `,
@@ -705,12 +730,53 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         }
       } else if (analyserRef.current && frequencyDataRef.current) {
         // Use internal music player audio data
-        analyserRef.current.getByteFrequencyData(frequencyDataRef.current);
+        const buf = new Uint8Array(frequencyDataRef.current.length);
+        analyserRef.current.getByteFrequencyData(buf);
+        frequencyDataRef.current.set(buf);
         let sum = 0;
         for (let i = 0; i < frequencyDataRef.current.length; i++) {
           sum += frequencyDataRef.current[i];
         }
         audioLevel = ((sum / frequencyDataRef.current.length / 255) * settings.sensitivity) / 5;
+      }
+
+      // Compute frequency band energies (low/mid/high) for richer animation
+      let audioLow = 0;
+      let audioMid = 0;
+      let audioHigh = 0;
+
+      // audioLevel is computed below; first ensure frequency data exists for bands
+      if (frequencyDataRef.current) {
+        const freq = frequencyDataRef.current;
+        const len = freq.length;
+        const lowEnd = Math.max(1, Math.floor(len * 0.12));
+        const midEnd = Math.max(lowEnd + 1, Math.floor(len * 0.5));
+        let sumL = 0;
+        let sumM = 0;
+        let sumH = 0;
+        for (let i = 0; i < len; i++) {
+          const v = freq[i];
+          if (i < lowEnd) sumL += v;
+          else if (i < midEnd) sumM += v;
+          else sumH += v;
+        }
+        audioLow = (sumL / (lowEnd * 255)) * (settings.sensitivity / 5);
+        audioMid = (sumM / ((midEnd - lowEnd) * 255)) * (settings.sensitivity / 5);
+        audioHigh = (sumH / ((len - midEnd) * 255)) * (settings.sensitivity / 5);
+        // clamp
+        audioLow = Math.min(Math.max(audioLow, 0), 1);
+        audioMid = Math.min(Math.max(audioMid, 0), 1);
+        audioHigh = Math.min(Math.max(audioHigh, 0), 1);
+        // Smooth band values to avoid jittery mesh distortion
+        const smLow = prevAudioLowRef.current + (audioLow - prevAudioLowRef.current) * audioSmoothing;
+        const smMid = prevAudioMidRef.current + (audioMid - prevAudioMidRef.current) * audioSmoothing;
+        const smHigh = prevAudioHighRef.current + (audioHigh - prevAudioHighRef.current) * audioSmoothing;
+        prevAudioLowRef.current = smLow;
+        prevAudioMidRef.current = smMid;
+        prevAudioHighRef.current = smHigh;
+        audioLow = smLow;
+        audioMid = smMid;
+        audioHigh = smHigh;
       }
 
       // Update orb - exact rotation calculations from reference plus manual rotation
@@ -750,6 +816,15 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
               const material = mesh.material as THREE.ShaderMaterial;
               material.uniforms.time.value = time;
               material.uniforms.audioLevel.value = audioLevel;
+              if ('audioLow' in material.uniforms) {
+                material.uniforms.audioLow.value = audioLow;
+              }
+              if ('audioMid' in material.uniforms) {
+                material.uniforms.audioMid.value = audioMid;
+              }
+              if ('audioHigh' in material.uniforms) {
+                material.uniforms.audioHigh.value = audioHigh;
+              }
               if ('distortion' in material.uniforms) {
                 material.uniforms.distortion.value = settings.distortion;
               }
