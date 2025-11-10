@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Chakra_Petch, Lacquer } from "next/font/google";
 import { Navbar } from "@/components/Navbar";
 import { GetInButton } from "@/components/GetIn";
-import Footer from "@/components/Footer";
 import { Providers } from '@/components/ui/provider';
 import { WalletProvider } from '@/components/WalletProvider';
 import { MusicPlayerProvider } from '@/components/MusicPlayerContext';
@@ -107,7 +106,6 @@ export default function RootLayout({
                   <main className="pb-20">
                     {children}
                   </main>
-                  <Footer />
                   <PersistentPlayer />
                 </AppLoadingProvider>
               </FullscreenProvider>

@@ -214,12 +214,16 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(240);
   const [volume, setVolumeState] = useState(0.7);
-  const [isShuffled, setIsShuffled] = useState(true);
+  const [isShuffled, setIsShuffledState] = useState(true);
   const [isRepeating, setIsRepeating] = useState(false);
   const [albumsWithMetadata, setAlbumsWithMetadata] = useState<Album[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const audioRef = useRef<HTMLAudioElement>(null);
+  // For shuffle-play: maintain a queued order (no repeats until all played)
+  const shuffleQueueRef = useRef<string[]>([]);
+  // History stack for previousTrack when shuffled
+  const shuffleHistoryRef = useRef<string[]>([]);
 
   // Utility function to convert any IPFS gateway URL or CID to ipfs.io
   const convertToIpfsIo = useCallback((url: string): string => {
@@ -249,6 +253,69 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     // If no IPFS pattern found, return original URL
     return url;
   }, []);
+
+  // Decide whether a URL should be proxied to avoid CORS issues (e.g. pinata gateways)
+  const shouldProxyUrl = useCallback((url: string): boolean => {
+    try {
+      const u = new URL(url);
+      const hostsToProxy = [
+        'pinata',
+        'gateway.pinata',
+        'ipfs.io',
+        'cloudflare-ipfs.com',
+        'dweb.link',
+        'infura',
+        'ipfs.infura.io'
+      ];
+      return hostsToProxy.some((h) => u.hostname.includes(h));
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const maybeProxy = useCallback((url: string): string => {
+    if (!url) return url;
+    if (shouldProxyUrl(url)) {
+      return `/api/proxy?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+  }, [shouldProxyUrl]);
+
+  // Generate a prioritized list of candidate URLs for audio playback.
+  // This helps when a gateway is unavailable or returns an unsupported response.
+  const generateAudioCandidates = useCallback((rawUrl: string): string[] => {
+    if (!rawUrl) return [];
+    // Normalize to ipfs.io when possible
+    const canonical = convertToIpfsIo(rawUrl);
+    const candidates: string[] = [];
+
+    // If canonical contains an IPFS hash, enumerate common gateways
+    const ipfsMatch = canonical.match(/\/ipfs\/(.+)$/);
+    if (ipfsMatch && ipfsMatch[1]) {
+      const hash = ipfsMatch[1];
+      const gateways = [
+        'https://ipfs.io/ipfs/',
+        'https://cloudflare-ipfs.com/ipfs/',
+        'https://dweb.link/ipfs/',
+        'https://gateway.pinata.cloud/ipfs/'
+      ];
+      for (const g of gateways) {
+        const direct = `${g}${hash}`;
+        // Try direct first, then proxied form (maybeProxy will return proxied path for known hosts)
+        candidates.push(direct);
+        const prox = maybeProxy(direct);
+        if (prox !== direct) candidates.push(prox);
+      }
+      // De-duplicate while preserving order
+      return Array.from(new Set(candidates));
+    }
+
+    // Not an IPFS path: prefer direct then proxied
+    candidates.push(canonical);
+    const prox = maybeProxy(canonical);
+    if (prox !== canonical) candidates.push(prox);
+    return Array.from(new Set(candidates));
+  }, [convertToIpfsIo, maybeProxy]);
 
   // Load metadata for a specific album
   const loadMetadata = useCallback(async (album: Album): Promise<NFTMetadata | null> => {
@@ -317,6 +384,16 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   }, [convertToIpfsIo]);
 
   // Load metadata for all albums
+  // Fisher-Yates shuffle
+  const shuffleArray = (arr: string[]) => {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
   const loadAllMetadata = useCallback(async () => {
     console.log('Loading all metadata...');
     setIsLoading(true);
@@ -400,7 +477,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       console.log('Finished loading metadata');
     }
   }, [loadMetadata]);
-
   // Load metadata on component mount
   useEffect(() => {
     loadAllMetadata();
@@ -409,29 +485,67 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   // Update audio source when current album changes
   useEffect(() => {
     if (audioRef.current && currentAlbum?.metadata) {
-      let audioUrl = currentAlbum.metadata.animation_url || currentAlbum.metadata.properties.audio_file;
-      
+  const audioUrl = currentAlbum.metadata.animation_url || currentAlbum.metadata.properties.audio_file;
+
       if (audioUrl) {
-        // Convert any IPFS gateway URL to ipfs.io for better reliability
-        audioUrl = convertToIpfsIo(audioUrl);
-        
-        // Get current volume at the time of loading
-        const currentVolume = audioRef.current.volume;
-        audioRef.current.src = audioUrl;
-        audioRef.current.volume = currentVolume; // Set volume immediately
-        audioRef.current.load();
-        
-        // Ensure volume is maintained after load
-        const handleLoadStart = () => {
-          if (audioRef.current) {
-            audioRef.current.volume = currentVolume;
+        // Build a list of candidate URLs (direct gateways + proxied forms)
+        const candidates = generateAudioCandidates(audioUrl);
+        if (candidates.length === 0) return;
+
+        let index = 0;
+        const audioEl = audioRef.current;
+        const currentVolume = audioEl.volume;
+
+        const applyCandidate = (i: number) => {
+          if (!audioRef.current) return;
+          const src = candidates[i];
+          audioRef.current.src = src;
+          audioRef.current.volume = currentVolume;
+          // Trigger load for some browsers
+          try {
+            audioRef.current.load();
+          } catch {
+            // ignore
           }
         };
-        
-        audioRef.current.addEventListener('loadstart', handleLoadStart, { once: true });
+
+        const onError = () => {
+          // Move to next candidate
+          index += 1;
+          if (index < candidates.length) {
+            console.warn('Audio source failed, trying next candidate:', candidates[index]);
+            applyCandidate(index);
+          } else {
+            console.error('All audio candidates failed for', audioUrl, candidates);
+          }
+        };
+
+        const onCanPlay = () => {
+          // Ensure volume stays as expected
+          if (audioRef.current) audioRef.current.volume = currentVolume;
+        };
+
+        // Attach listeners
+        audioEl.addEventListener('error', onError);
+        audioEl.addEventListener('stalled', onError);
+        audioEl.addEventListener('canplay', onCanPlay);
+
+        // Start with first candidate
+        applyCandidate(0);
+
+        // Cleanup listeners when effect re-runs or unmounts
+        return () => {
+          try {
+            audioEl.removeEventListener('error', onError);
+            audioEl.removeEventListener('stalled', onError);
+            audioEl.removeEventListener('canplay', onCanPlay);
+          } catch {
+            // ignore
+          }
+        };
       }
     }
-  }, [currentAlbum, convertToIpfsIo]); // Only depend on currentAlbum to avoid circular triggers
+  }, [currentAlbum, convertToIpfsIo, maybeProxy, generateAudioCandidates]); // Only depend on currentAlbum to avoid circular triggers
 
   // Update volume when volume state changes
   useEffect(() => {
@@ -469,12 +583,38 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     let nextAlbum: Album;
     
     if (isShuffled) {
-      // Get a random album that's not the current one
-      const availableAlbums = albumsWithMetadata.filter(album => album.id !== currentAlbum.id);
-      if (availableAlbums.length === 0) return;
-      
-      const randomIndex = Math.floor(Math.random() * availableAlbums.length);
-      nextAlbum = availableAlbums[randomIndex];
+      // Use the shuffle queue to pick the next album (no repeats until exhausted)
+      // Ensure queue is initialized
+      if (!shuffleQueueRef.current || shuffleQueueRef.current.length === 0) {
+        const ids = albumsWithMetadata.map(a => a.id).filter(id => id !== currentAlbum.id);
+        shuffleQueueRef.current = shuffleArray(ids);
+        shuffleHistoryRef.current = [];
+      }
+
+      const nextId = shuffleQueueRef.current.shift();
+      if (!nextId) {
+        // Nothing left in queue
+        if (isRepeating) {
+          const ids = albumsWithMetadata.map(a => a.id).filter(id => id !== currentAlbum.id);
+          shuffleQueueRef.current = shuffleArray(ids);
+          const regenerated = shuffleQueueRef.current.shift();
+          if (!regenerated) return;
+          shuffleHistoryRef.current = [];
+          const found = albumsWithMetadata.find(a => a.id === regenerated);
+          if (!found) return;
+          nextAlbum = found;
+        } else {
+          // Stop playback if queue exhausted and not repeating
+          setIsPlaying(false);
+          return;
+        }
+      } else {
+        // Push current to history and find next album
+        shuffleHistoryRef.current.push(currentAlbum.id);
+        const found = albumsWithMetadata.find(a => a.id === nextId);
+        if (!found) return;
+        nextAlbum = found;
+      }
     } else {
       // Normal sequential playback
       const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
@@ -496,7 +636,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         audioRef.current?.play().catch(console.error);
       }, 100);
     }
-  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum]);
+  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, isRepeating, setCurrentAlbum]);
 
   const previousTrack = useCallback(() => {
     if (!currentAlbum) return;
@@ -504,12 +644,24 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     let previousAlbum: Album;
     
     if (isShuffled) {
-      // Get a random album that's not the current one
-      const availableAlbums = albumsWithMetadata.filter(album => album.id !== currentAlbum.id);
-      if (availableAlbums.length === 0) return;
-      
-      const randomIndex = Math.floor(Math.random() * availableAlbums.length);
-      previousAlbum = availableAlbums[randomIndex];
+      // Use the shuffle history stack to go back
+      if (shuffleHistoryRef.current && shuffleHistoryRef.current.length > 0) {
+        const prevId = shuffleHistoryRef.current.pop();
+        if (prevId) {
+          // Put the current album back to the front of the queue so it can be revisited
+          shuffleQueueRef.current = [currentAlbum.id, ...(shuffleQueueRef.current || [])];
+          const found = albumsWithMetadata.find(a => a.id === prevId);
+          if (!found) return;
+          previousAlbum = found;
+        } else {
+          return;
+        }
+      } else {
+        // No history, fallback to sequential previous
+        const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
+        const previousIndex = currentIndex > 0 ? currentIndex - 1 : albumsWithMetadata.length - 1;
+        previousAlbum = albumsWithMetadata[previousIndex];
+      }
     } else {
       // Normal sequential playback
       const currentIndex = albumsWithMetadata.findIndex(album => album.id === currentAlbum.id);
@@ -576,6 +728,30 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const refreshMusicQueue = useCallback(async () => {
     await loadAllMetadata();
   }, [loadAllMetadata]);
+
+  // Exposed setter that also initializes/clears shuffle queue and history
+  const setIsShuffled = useCallback((shuffled: boolean) => {
+    setIsShuffledState(shuffled);
+    if (shuffled) {
+      const ids = albumsWithMetadata.map(a => a.id).filter(id => id !== currentAlbum?.id);
+      shuffleQueueRef.current = shuffleArray(ids);
+      shuffleHistoryRef.current = [];
+    } else {
+      shuffleQueueRef.current = [];
+      shuffleHistoryRef.current = [];
+    }
+  }, [albumsWithMetadata, currentAlbum?.id]);
+
+  // Ensure the shuffle queue is initialized when albums or shuffle mode changes
+  useEffect(() => {
+    if (isShuffled && albumsWithMetadata.length > 0) {
+      if (!shuffleQueueRef.current || shuffleQueueRef.current.length === 0) {
+        const ids = albumsWithMetadata.map(a => a.id).filter(id => id !== currentAlbum?.id);
+        shuffleQueueRef.current = shuffleArray(ids);
+        shuffleHistoryRef.current = [];
+      }
+    }
+  }, [albumsWithMetadata, isShuffled, currentAlbum?.id]);
 
   // Helper function to get current background image
   const getCurrentBackgroundImage = useCallback((): string | null => {

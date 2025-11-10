@@ -91,11 +91,16 @@ export const useFullscreen = () => {
     );
   }, []);
 
+  // Keep a reactive boolean for browser fullscreen so consumers update on change
+  const [browserFullscreen, setBrowserFullscreen] = useState<boolean>(isBrowserFullscreen());
+
   // Handle fullscreen changes from browser events
   const handleFullscreenChange = useCallback(() => {
-    const browserFullscreen = isBrowserFullscreen();
+    const currentBrowserFs = isBrowserFullscreen();
+    // Update reactive browser fullscreen state
+    setBrowserFullscreen(currentBrowserFs);
     // If browser exits fullscreen, also exit our custom fullscreen
-    if (!browserFullscreen && isFullscreen) {
+    if (!currentBrowserFs && isFullscreen) {
       setIsFullscreen(false);
     }
   }, [isFullscreen, isBrowserFullscreen]);
@@ -158,7 +163,8 @@ export const useFullscreen = () => {
   const toggleFullscreen = useCallback(async () => {
     const newState = !isFullscreen;
     setIsFullscreen(newState);
-    
+    // reflect expected browser fullscreen state immediately for UI
+    setBrowserFullscreen(newState);
     if (newState) {
       await enterBrowserFullscreen();
     } else {
@@ -168,11 +174,15 @@ export const useFullscreen = () => {
 
   const enterFullscreen = useCallback(async () => {
     setIsFullscreen(true);
+    // optimistic update for browser flag; the actual event will confirm
+    setBrowserFullscreen(true);
     await enterBrowserFullscreen();
   }, [enterBrowserFullscreen]);
 
   const exitFullscreen = useCallback(async () => {
     setIsFullscreen(false);
+    // optimistic update for browser flag; the actual event will confirm
+    setBrowserFullscreen(false);
     await exitBrowserFullscreen();
   }, [exitBrowserFullscreen]);
 
@@ -182,6 +192,6 @@ export const useFullscreen = () => {
     enterFullscreen,
     exitFullscreen,
     isFullscreenSupported: isFullscreenSupported(),
-    isBrowserFullscreen: isBrowserFullscreen(),
+    isBrowserFullscreen: browserFullscreen,
   };
 };

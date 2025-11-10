@@ -5,14 +5,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Skeleton } from './ui/skeleton';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { useMusicPlayer } from './MusicPlayerContext';
-import { useFullscreenContext } from './FullscreenProvider';
 import { useIsMobile } from '../hooks/use-mobile';
 
 export default function PersistentPlayer() {
   const router = useRouter();
-  const { isFullscreen } = useFullscreenContext();
   const {
     currentAlbum,
     isPlaying,
@@ -36,6 +34,7 @@ export default function PersistentPlayer() {
   const [imageError, setImageError] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [showImageModal, setShowImageModal] = useState(false);
 
     const isMobile = useIsMobile();
 
@@ -204,6 +203,35 @@ export default function PersistentPlayer() {
     return null;
   }
 
+  // Floating centered-left cover while playing
+  const floatingCover = isPlaying && currentAlbum?.metadata?.image ? (
+    <div className="hidden md:flex fixed left-4 top-1/2 transform -translate-y-1/2 z-50">
+      <div className="cover-hover-wrapper w-40 h-40 rounded-lg overflow-hidden shadow-lg">
+          <div
+            className="cover-scale w-full h-full relative"
+            onClick={(e) => { e.stopPropagation(); setShowImageModal(true); }}
+            role="button"
+            aria-label="Open floating cover fullscreen"
+          >
+            <Image
+              src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
+              alt={getTitle(currentAlbum.metadata)}
+              width={210}
+              height={210}
+              className="w-full h-full object-cover"
+              onError={handleImageError}
+            />
+          </div>
+        <div className="cover-overlay pointer-events-none">
+          <div className="cover-overlay-inner">
+            <div className="cover-title" title={getTitle(currentAlbum.metadata)}>{getTitle(currentAlbum.metadata)}</div>
+            <div className="cover-artist" title={getArtist(currentAlbum.metadata)}>{getArtist(currentAlbum.metadata)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <>
       {/* Mobile: Title & Artist above persistent player */}
@@ -217,14 +245,53 @@ export default function PersistentPlayer() {
           </span>
         </div>
       )}
-      <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 ${
-        isFullscreen 
-          ? 'bg-background/20 backdrop-blur-xl' 
-          : 'bg-background/95 backdrop-blur-md'
-      }`}>
+        {floatingCover}
+
+        {/* Fullscreen image modal */}
+        {showImageModal && (
+          <div
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/80"
+            onClick={() => setShowImageModal(false)}
+          >
+            <div className="relative w-screen h-screen">
+              <div className="relative w-full h-full">
+                <Image
+                  src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
+                  alt={getTitle(currentAlbum.metadata)}
+                  fill
+                  priority
+                  className="object-contain w-full h-full"
+                />
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowImageModal(false); }}
+                className="absolute top-4 right-4 bg-black bg-opacity-60 text-white p-2 rounded z-80"
+                aria-label="Close image"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
+  <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 persistent-player`}>
+    {/* Top timeline spanning full width of the player */}
+    <div
+      className="player-timeline-wrapper"
+      onClick={handleTimelineClick}
+      role="slider"
+      aria-label="Seek timeline"
+      aria-valuemin={0}
+      aria-valuemax={duration || 0}
+      aria-valuenow={currentTime}
+    >
+      <div
+        className="player-timeline-fill"
+        style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+      />
+    </div>
         {/* Collapsed view - Grid layout similar to Spotify */}
         {!isExpanded && (
-          <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2">
+          <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2 pp-controls">
           {/* Left section - Song info (1/3 width) */}
           <div 
             className={`flex items-center space-x-3 min-w-0 cursor-pointer hover:bg-muted/20 p-0 rounded-lg transition-all duration-300 ${
@@ -233,34 +300,48 @@ export default function PersistentPlayer() {
             onClick={navigateToCurrentNFT}
             title="View NFT details"
           >
-            <div className={`w-20 h-20 relative rounded overflow-hidden flex-shrink-0 transition-all duration-300 ${
-              isTransitioning ? 'ring-2 ring-primary/50' : ''
-            }`}>
-              {imageLoading && (
-                <Skeleton className="absolute inset-0 w-full h-full z-10" />
-              )}
-              {currentAlbum?.metadata?.image ? (
-                <Image
-                  src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
-                  alt={getTitle(currentAlbum.metadata)}
-                  fill
-                  sizes="80px"
-                  priority
-                  className="object-cover"
-                  onError={handleImageError}
-                  onLoad={handleImageLoad}
+            <div className={`cover-hover-wrapper relative flex-shrink-0 transition-all duration-300 ${isTransitioning ? 'ring-2 ring-primary/50' : ''}`}>
+              <div className={`cover-scale w-20 h-20 relative rounded overflow-hidden`}>
+                {imageLoading && (
+                  <Skeleton className="absolute inset-0 w-full h-full z-10" />
+                )}
+                {currentAlbum?.metadata?.image ? (
+                  <Image
+                    src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
+                    alt={getTitle(currentAlbum.metadata)}
+                    fill
+                    sizes="80px"
+                    priority
+                    className="object-cover"
+                    onError={handleImageError}
+                    onLoad={handleImageLoad}
+                  />
+                ) : (
+                  <Image
+                    src="/SUMAK.png"
+                    alt="SUMAK Default"
+                    fill
+                    sizes="80px"
+                    priority
+                    className="object-cover"
+                    onLoad={handleImageLoad}
+                  />
+                )}
+                {/* Make the cover itself clickable to open the fullscreen modal */}
+                <div
+                  onClick={(e) => { e.stopPropagation(); setShowImageModal(true); }}
+                  role="button"
+                  aria-label="Open cover fullscreen"
+                  className="absolute inset-0 z-30"
                 />
-              ) : (
-                <Image
-                  src="/SUMAK.png"
-                  alt="SUMAK Default"
-                  fill
-                  sizes="80px"
-                  priority
-                  className="object-cover"
-                  onLoad={handleImageLoad}
-                />
-              )}
+              </div>
+              {/* Overlay shown on hover - title & artist in Nimbus font */}
+              <div className="cover-overlay pointer-events-none">
+                <div className="cover-overlay-inner">
+                  <div className="cover-title" title={getTitle(currentAlbum.metadata)}>{getTitle(currentAlbum.metadata)}</div>
+                  <div className="cover-artist" title={getArtist(currentAlbum.metadata)}>{getArtist(currentAlbum.metadata)}</div>
+                </div>
+              </div>
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
               {!isMobile && (
@@ -298,7 +379,7 @@ export default function PersistentPlayer() {
           </div>
 
           {/* Center section - Controls (1/3 width) */}
-          <div className="flex flex-col items-center space-y-2">
+            <div className="flex flex-col items-center space-y-2 pp-controls">
             <div className="flex items-center justify-center w-full">
               {!isMobile && (
                 <button
@@ -309,16 +390,9 @@ export default function PersistentPlayer() {
                   title="Previous track (will update background)"
                 >
                   <SkipBack size={16} />
-                </button>
-              )}
-              <button
-                onClick={togglePlayPause}
-                className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-              </button>
-              {!isMobile && (
+        </button>
+        )}
+        {!isMobile && (
                 <button
                   onClick={handleNextTrack}
                   className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ml-4 ${
@@ -330,25 +404,7 @@ export default function PersistentPlayer() {
                 </button>
               )}
             </div>
-            {!isMobile && (
-              <div className="w-full flex items-center space-x-2">
-                <span className="text-xs text-muted-foreground min-w-[30px] text-right">
-                  {formatTime(currentTime)}
-                </span>
-                <div
-                  className="flex-1 h-1 bg-muted rounded-full cursor-pointer"
-                  onClick={handleTimelineClick}
-                >
-                  <div
-                    className="h-full bg-foreground rounded-full transition-all duration-100"
-                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground min-w-[30px]">
-                  {formatTime(duration)}
-                </span>
-              </div>
-            )}
+            {/* timeline moved to top of player */}
           </div>
 
           {/* Right section - Volume and expand (1/3 width) */}
@@ -379,8 +435,8 @@ export default function PersistentPlayer() {
       )}
 
       {/* Expanded view */}
-      {isExpanded && (
-        <div className="p-2 space-y-2">
+          {isExpanded && (
+        <div className="p-2 space-y-2 pp-controls">
           {/* Header with collapse button */}
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Now Playing</h3>
@@ -496,7 +552,8 @@ export default function PersistentPlayer() {
                 </button>
                 <button
                   onClick={togglePlayPause}
-                  className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center hover:bg-primary/90 transition-colors cursor-pointer"
+                  className="w-12 h-12 rounded-full bg-transparent text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
                 >
                   {isPlaying ? <Pause size={24} /> : <Play size={24} />}
                 </button>
@@ -655,6 +712,131 @@ export default function PersistentPlayer() {
 
         .slider:focus::-moz-range-thumb {
           box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        /* On desktop hide persistent player controls until hover; on mobile always show */
+        @media (min-width: 768px) {
+          .persistent-player .pp-controls {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 180ms ease-in-out;
+          }
+
+          .persistent-player:hover .pp-controls {
+            opacity: 1;
+            pointer-events: auto;
+          }
+        }
+
+        /* Initial transparent background for persistent player; on hover make it blurred and opaque */
+        .persistent-player {
+          background: transparent;
+          backdrop-filter: none;
+          transition: background-color 220ms ease-in-out, backdrop-filter 220ms ease-in-out;
+        }
+
+        .persistent-player:hover {
+          /* match bg-background/30 roughly: use a translucent layer and blur */
+          background-color: rgba(10, 10, 10, 0.22);
+          backdrop-filter: blur(12px);
+        }
+
+        /* Cover hover expand and overlay */
+        .cover-hover-wrapper {
+          display: inline-block;
+          position: relative;
+          will-change: transform;
+        }
+
+        .cover-scale {
+          transition: transform 220ms cubic-bezier(.2,.9,.2,1), box-shadow 220ms;
+          transform-origin: left center;
+          z-index: 10;
+        }
+
+        /* Overlay hidden by default */
+        .cover-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          padding: 8px;
+          z-index: 25;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 180ms ease-in-out, transform 220ms cubic-bezier(.2,.9,.2,1);
+        }
+
+        .cover-overlay-inner {
+          text-align: center;
+          backdrop-filter: blur(6px);
+          background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%);
+          padding: 6px 8px;
+          border-radius: 6px;
+        }
+
+        .cover-title {
+          font-family: 'Nimbus', 'Nimbus Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+          font-weight: 700;
+          font-size: 12px;
+          color: #ffffff;
+          line-height: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 160px;
+        }
+
+        .cover-artist {
+          font-family: 'Nimbus', 'Nimbus Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+          font-weight: 500;
+          font-size: 11px;
+          color: #ffffff;
+          opacity: 0.9;
+          margin-top: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 160px;
+        }
+
+        /* Only apply hover scaling on devices that support hover to avoid mobile surprises */
+        @media (hover: hover) and (pointer: fine) {
+          .cover-hover-wrapper:hover .cover-scale {
+            transform: scale(2);
+            z-index: 60;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+          }
+
+          .cover-hover-wrapper:hover .cover-overlay {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* On touch devices, show a smaller static overlay to ensure title/artist visibility */
+        @media (hover: none) and (pointer: coarse) {
+          .cover-overlay { opacity: 1; }
+          .cover-scale { transform: none; }
+        }
+
+        /* Player timeline at top border */
+        .player-timeline-wrapper {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 6px;
+          cursor: pointer;
+          background: rgba(255,255,255,0.04);
+          z-index: 70;
+        }
+
+        .player-timeline-fill {
+          height: 100%;
+          background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.6));
+          transition: width 120ms linear;
         }
       `}</style>
     </div>

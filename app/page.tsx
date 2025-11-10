@@ -1,6 +1,5 @@
 'use client';
 
-import Footer from '@/components/Footer';
 import { Navbar } from '@/components/Navbar';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import OrbVisualizer from '@/components/OrbVisualizer';
@@ -104,7 +103,7 @@ export default function Page() {
 
 
   return (
-    <div className="bg-transparent min-h-screen">
+    <div className="bg-transparent">
       <Navbar />
       
       <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground p-4 md:p-8 overflow-hidden">
@@ -171,9 +170,6 @@ export default function Page() {
 
         <OrbVisualizer />
     </div>
-
-      <Footer />
-
       <style jsx>{`
         .slider::-webkit-slider-thumb {
           appearance: none;

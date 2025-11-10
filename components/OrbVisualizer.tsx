@@ -43,10 +43,107 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   const lastTimeRef = useRef(0);
   const dampingFactor = 0.95; // How quickly the inertia decays (0.95 = 5% decay per frame)
   const inertiaMultiplier = 0.1; // How much of the velocity to apply as inertia
+  // Keep a short history of recent pointer movements so we can compute
+  // an averaged release velocity (prevents abrupt stops on quick releases)
+  const moveHistoryRef = useRef<Array<{ dx: number; dy: number; dt: number }>>([]);
   
   const { audioRef, isPlaying, currentAlbum, setCurrentAlbum } = useMusicPlayer();
   
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Base color used across visualizer (default = #ff4e42)
+  const [baseColor, setBaseColor] = useState({ r: 255, g: 78, b: 66 });
+  const baseColorRef = useRef(baseColor);
+  useEffect(() => { baseColorRef.current = baseColor; }, [baseColor]);
+
+  // displayColorRef is the smoothly interpolated color used for visuals
+  const displayColorRef = useRef({ ...baseColor });
+
+  // Keep track of dynamic point lights to update their colors each frame
+  const pointLightsRef = useRef<THREE.PointLight[]>([]);
+
+  // Helper: compute average color of an image URL using an offscreen canvas.
+  const computeAverageImageColor = async (url: string): Promise<{r:number,g:number,b:number} | null> => {
+    if (!url) return null;
+    return new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        const processImage = () => {
+          try {
+            const w = Math.min(64, img.width || 64);
+            const h = Math.min(64, img.height || 64);
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d');
+            if (!ctx) return resolve(null);
+            ctx.drawImage(img, 0, 0, w, h);
+            const data = ctx.getImageData(0, 0, w, h).data;
+            let r = 0, g = 0, b = 0, count = 0;
+            for (let i = 0; i < data.length; i += 4) {
+              const alpha = data[i+3];
+              // ignore fully transparent pixels
+              if (alpha === 0) continue;
+              r += data[i];
+              g += data[i+1];
+              b += data[i+2];
+              count++;
+            }
+            if (count === 0) return resolve(null);
+            r = Math.round(r / count);
+            g = Math.round(g / count);
+            b = Math.round(b / count);
+            resolve({ r, g, b });
+          } catch (err) {
+            console.warn('Error computing average color:', err);
+            resolve(null);
+          }
+        };
+
+        let triedProxy = false;
+        img.onload = () => processImage();
+        img.onerror = () => {
+          if (!triedProxy) {
+            triedProxy = true;
+            try {
+              img.src = `/api/proxy?url=${encodeURIComponent(url)}`;
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+          resolve(null);
+        };
+        img.src = url;
+        // If already cached/complete, process immediately
+        if (img.complete && img.naturalWidth) {
+          processImage();
+        }
+      } catch (err) {
+        console.warn('computeAverageImageColor failed', err);
+        resolve(null);
+      }
+    });
+  };
+
+  // When the current album changes, compute its average cover color and apply
+  useEffect(() => {
+    let cancelled = false;
+    const update = async () => {
+      const imageUrl = currentAlbum?.metadata?.image;
+      if (!imageUrl) return;
+      const avg = await computeAverageImageColor(imageUrl);
+      if (cancelled) return;
+      if (avg) {
+        setBaseColor(avg);
+      } else {
+        // keep default
+      }
+    };
+    update();
+    return () => { cancelled = true; };
+  }, [currentAlbum?.metadata?.image]);
 
   // Settings based on requirements - use useMemo to prevent re-creation
   const settings = useMemo(() => ({
@@ -67,8 +164,9 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
     lastMouseRef.current = { x: clientX, y: clientY };
     lastTimeRef.current = performance.now();
     
-    // Reset velocity when starting a new drag
-    velocityRef.current = { x: 0, y: 0 };
+  // Reset velocity and move history when starting a new drag
+  velocityRef.current = { x: 0, y: 0 };
+  moveHistoryRef.current = [];
     
     // Prevent default to avoid scrolling/zooming on touch devices
     event.preventDefault();
@@ -93,8 +191,21 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       
       // Calculate velocity for inertia (pixels per millisecond)
       if (deltaTime > 0) {
-        velocityRef.current.x = deltaY / deltaTime;
-        velocityRef.current.y = deltaX / deltaTime;
+        // store instantaneous velocity and also push into recent history
+        const vx = deltaY / deltaTime;
+        const vy = deltaX / deltaTime;
+        velocityRef.current.x = vx;
+        velocityRef.current.y = vy;
+        moveHistoryRef.current.push({ dx: deltaX, dy: deltaY, dt: deltaTime });
+        // keep only recent entries (~200ms worth)
+        let totalDt = 0;
+        for (let i = moveHistoryRef.current.length - 1; i >= 0; i--) {
+          totalDt += moveHistoryRef.current[i].dt;
+          if (totalDt > 200) {
+            moveHistoryRef.current.splice(0, i);
+            break;
+          }
+        }
       }
       
       lastMouseRef.current = { x: clientX, y: clientY };
@@ -104,6 +215,22 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Compute averaged release velocity from history for smooth inertia
+    if (moveHistoryRef.current.length > 0) {
+      let sumDx = 0;
+      let sumDy = 0;
+      let sumDt = 0;
+      for (const m of moveHistoryRef.current) {
+        sumDx += m.dx;
+        sumDy += m.dy;
+        sumDt += m.dt;
+      }
+      if (sumDt > 0) {
+        velocityRef.current.x = sumDy / sumDt;
+        velocityRef.current.y = sumDx / sumDt;
+      }
+    }
+
     isDraggingRef.current = false;
     setIsGrabbing(false);
   };
@@ -147,12 +274,17 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       pulsePhase: number;
     }> = [];
 
-    for (let i = 0; i < numParticles; i++) {
+  for (let i = 0; i < numParticles; i++) {
       const particle = document.createElement('div');
       particle.style.position = 'absolute';
       particle.style.width = '1.5px';
       particle.style.height = '1.5px';
-      particle.style.backgroundColor = `rgba(255, ${Math.floor(Math.random() * 100) + 78}, ${Math.floor(Math.random() * 100) + 66}, ${Math.random() * 0.5 + 0.2})`;
+  // Use baseColor with slight random variation and alpha
+  const bc = baseColorRef.current;
+  const r = Math.min(255, Math.max(0, Math.floor(bc.r * (0.8 + Math.random() * 0.4))));
+  const g = Math.min(255, Math.max(0, Math.floor(bc.g * (0.8 + Math.random() * 0.4))));
+  const b = Math.min(255, Math.max(0, Math.floor(bc.b * (0.8 + Math.random() * 0.4))));
+  particle.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${Math.random() * 0.5 + 0.12})`;
       particle.style.borderRadius = '50%';
       particle.style.pointerEvents = 'none';
 
@@ -229,7 +361,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
     };
 
     animateParticles();
-  }, []);
+  }, [baseColor.r, baseColor.g, baseColor.b]);
 
   // Initialize circular visualizer
   useEffect(() => {
@@ -245,7 +377,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
     };
     resizeCanvas();
 
-    const drawCircularVisualizer = () => {
+      const drawCircularVisualizer = () => {
       const width = canvas.width;
       const height = canvas.height;
       const centerX = width / 2;
@@ -271,11 +403,12 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         const numPoints = 180;
         const baseRadius = Math.min(width, height) * 0.4;
         
-        // Draw base circle
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, baseRadius * 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 78, 66, 0.05)';
-        ctx.fill();
+  // Draw base circle
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, baseRadius * 1.2, 0, Math.PI * 2);
+  const bc = displayColorRef.current;
+  ctx.fillStyle = `rgba(${bc.r}, ${bc.g}, ${bc.b}, 0.05)`;
+  ctx.fill();
 
         const numRings = 3;
           for (let ring = 0; ring < numRings; ring++) {
@@ -310,22 +443,27 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
           ctx.closePath();
           
           const gradient = ctx.createRadialGradient(centerX, centerY, ringRadius * 0.8, centerX, centerY, ringRadius * 1.2);
+          const bc = displayColorRef.current;
+          // build a couple of tints for stops
+          const stop0 = `rgba(${Math.round(bc.r)}, ${Math.round(bc.g)}, ${Math.round(bc.b)}, ${opacity})`;
+          const stop1 = `rgba(${Math.round(bc.r * 0.75)}, ${Math.round(bc.g * 0.75)}, ${Math.round(bc.b * 0.75)}, ${opacity * 0.7})`;
+          const stop2 = `rgba(${Math.round(Math.min(255, bc.r * 1.2))}, ${Math.round(Math.min(255, bc.g * 1.2))}, ${Math.round(Math.min(255, bc.b * 1.2))}, ${opacity * 0.7})`;
           if (ring === 0) {
-            gradient.addColorStop(0, `rgba(255, 78, 66, ${opacity})`);
-            gradient.addColorStop(1, `rgba(194, 54, 47, ${opacity * 0.7})`);
+            gradient.addColorStop(0, stop0);
+            gradient.addColorStop(1, stop1);
           } else if (ring === 1) {
-            gradient.addColorStop(0, `rgba(194, 54, 47, ${opacity})`);
-            gradient.addColorStop(1, `rgba(255, 179, 171, ${opacity * 0.7})`);
+            gradient.addColorStop(0, stop1);
+            gradient.addColorStop(1, stop2);
           } else {
-            gradient.addColorStop(0, `rgba(255, 179, 171, ${opacity})`);
-            gradient.addColorStop(1, `rgba(255, 78, 66, ${opacity * 0.7})`);
+            gradient.addColorStop(0, stop2);
+            gradient.addColorStop(1, stop0);
           }
           
           ctx.strokeStyle = gradient;
           ctx.lineWidth = 2 + (numRings - ring);
           ctx.stroke();
           ctx.shadowBlur = 15;
-          ctx.shadowColor = 'rgba(255, 78, 66, 0.7)';
+          ctx.shadowColor = `rgba(${bc.r}, ${bc.g}, ${bc.b}, 0.7)`;
         }
         ctx.shadowBlur = 0;
       }
@@ -396,8 +534,13 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         directionalLight.position.set(1, 1, 1);
         scene.add(directionalLight);
 
-        const pointLight1 = new THREE.PointLight(0xff4e42, 1, 10);
+  const hexFromRgb = (r: number, g: number, b: number) => ((r << 16) + (g << 8) + b);
+  const dispInit = displayColorRef.current;
+  const pointLight1 = new THREE.PointLight(hexFromRgb(dispInit.r, dispInit.g, dispInit.b), 1, 10);
         pointLight1.position.set(2, 2, 2);
+    // mark as dynamic and store for updates
+    pointLight1.userData.dynamic = true;
+    pointLightsRef.current.push(pointLight1);
         scene.add(pointLight1);
 
         const pointLight2 = new THREE.PointLight(0xc2362f, 1, 10);
@@ -422,19 +565,20 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
     const createAnomalyObject = (scene: THREE.Scene) => {
       const anomalyObject = new THREE.Group();
-      const radius = 2.7;
+      const radius = 1;
 
       // Outer geometry with exact resolution calculation from reference
       const outerGeometry = new THREE.IcosahedronGeometry(
         radius,
-        Math.max(1, Math.floor(settings.resolution / 4))
+        Math.max(1, Math.floor(settings.resolution / 21))
       );
 
       // Main orb material - exact copy from reference with our settings
+        const bc = baseColorRef.current;
         const outerMaterial = new THREE.ShaderMaterial({
         uniforms: {
           time: { value: 0 },
-          color: { value: new THREE.Color(0xff4e42) },
+          color: { value: new THREE.Color(bc.r / 255, bc.g / 255, bc.b / 255) },
           audioLevel: { value: 0 },
           audioLow: { value: 0 },
           audioMid: { value: 0 },
@@ -519,7 +663,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
           void main() {
             vNormal = normalize(normalMatrix * normal);
             
-            float slowTime = time * 0.2;
+            float slowTime = time * 0.3;
             vec3 pos = position;
             
             float noise = snoise(vec3(position.x * 0.5, position.y * 0.5, position.z * 0.5 + slowTime));
@@ -566,7 +710,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       const glowMaterial = new THREE.ShaderMaterial({
         uniforms: {
           time: { value: 0 },
-          color: { value: new THREE.Color(0xff4e42) },
+          color: { value: new THREE.Color(bc.r / 255, bc.g / 255, bc.b / 255) },
           audioLevel: { value: 0 },
           audioLow: { value: 0 },
           audioMid: { value: 0 },
@@ -629,9 +773,12 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       const colors = new Float32Array(particleCount * 3);
       const sizes = new Float32Array(particleCount);
       
-      const color1 = new THREE.Color(0xff4e42);
-      const color2 = new THREE.Color(0xc2362f);
-      const color3 = new THREE.Color(0xffb3ab);
+  // background particle base color
+  const bcParticles = baseColorRef.current;
+  const baseThree = new THREE.Color(bcParticles.r / 255, bcParticles.g / 255, bcParticles.b / 255);
+  const color1 = baseThree.clone();
+  const color2 = baseThree.clone().multiplyScalar(0.78);
+  const color3 = baseThree.clone().multiplyScalar(1.15);
 
       for (let i = 0; i < particleCount; i++) {
         positions[i * 3] = (Math.random() - 0.5) * 100;
@@ -711,6 +858,23 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       }
 
       const time = clockRef.current?.getElapsedTime() || 0;
+
+      // Smoothly interpolate displayed color toward the target baseColor
+      const target = baseColorRef.current;
+      const disp = displayColorRef.current;
+      const lerpFactor = 0.06; // smaller = slower transition
+      disp.r = disp.r + (target.r - disp.r) * lerpFactor;
+      disp.g = disp.g + (target.g - disp.g) * lerpFactor;
+      disp.b = disp.b + (target.b - disp.b) * lerpFactor;
+
+      // Update dynamic point lights to follow display color
+      if (pointLightsRef.current && pointLightsRef.current.length > 0) {
+        for (const pl of pointLightsRef.current) {
+          if (pl && 'color' in pl) {
+            pl.color.setRGB(disp.r / 255, disp.g / 255, disp.b / 255);
+          }
+        }
+      }
       let audioLevel = 0;
 
       // Use external audio data if available, otherwise use internal music player data
@@ -798,14 +962,14 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
           const sensitivity = 0.01;
           rotationRef.current.x += velocityRef.current.x * sensitivity * inertiaMultiplier;
           rotationRef.current.y += velocityRef.current.y * sensitivity * inertiaMultiplier;
-          
+
           // Apply damping to velocity for smooth deceleration
           velocityRef.current.x *= dampingFactor;
           velocityRef.current.y *= dampingFactor;
-          
-          // Stop very small velocities to prevent infinite spinning
-          if (Math.abs(velocityRef.current.x) < 0.001) velocityRef.current.x = 0;
-          if (Math.abs(velocityRef.current.y) < 0.001) velocityRef.current.y = 0;
+
+          // Stop very small velocities to prevent infinite spinning (lower threshold)
+          if (Math.abs(velocityRef.current.x) < 0.00005) velocityRef.current.x = 0;
+          if (Math.abs(velocityRef.current.y) < 0.00005) velocityRef.current.y = 0;
         }
 
         // Update materials
@@ -827,6 +991,15 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
               }
               if ('distortion' in material.uniforms) {
                 material.uniforms.distortion.value = settings.distortion;
+              }
+              // Update color uniform to match interpolated display color
+              if ('color' in material.uniforms) {
+                const d = displayColorRef.current;
+                if (material.uniforms.color.value && 'setRGB' in material.uniforms.color.value) {
+                  (material.uniforms.color.value as THREE.Color).setRGB(d.r / 255, d.g / 255, d.b / 255);
+                } else {
+                  material.uniforms.color.value = new THREE.Color(d.r / 255, d.g / 255, d.b / 255);
+                }
               }
             }
           }
@@ -943,10 +1116,22 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         rotationRef.current.x += deltaY * sensitivity;
         rotationRef.current.y += deltaX * sensitivity;
         
-        // Calculate velocity for inertia
+        // Calculate instantaneous velocity and push to history for averaging on release
         if (deltaTime > 0) {
-          velocityRef.current.x = deltaY / deltaTime;
-          velocityRef.current.y = deltaX / deltaTime;
+          const vx = deltaY / deltaTime;
+          const vy = deltaX / deltaTime;
+          velocityRef.current.x = vx;
+          velocityRef.current.y = vy;
+          moveHistoryRef.current.push({ dx: deltaX, dy: deltaY, dt: deltaTime });
+          // prune older entries beyond ~200ms
+          let totalDt = 0;
+          for (let i = moveHistoryRef.current.length - 1; i >= 0; i--) {
+            totalDt += moveHistoryRef.current[i].dt;
+            if (totalDt > 200) {
+              moveHistoryRef.current.splice(0, i);
+              break;
+            }
+          }
         }
         
         lastMouseRef.current = { x: event.clientX, y: event.clientY };
@@ -981,6 +1166,21 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
     const handleGlobalMouseUp = () => {
       if (isDraggingRef.current) {
+        // compute averaged velocity on global release as well
+        if (moveHistoryRef.current.length > 0) {
+          let sumDx = 0;
+          let sumDy = 0;
+          let sumDt = 0;
+          for (const m of moveHistoryRef.current) {
+            sumDx += m.dx;
+            sumDy += m.dy;
+            sumDt += m.dt;
+          }
+          if (sumDt > 0) {
+            velocityRef.current.x = sumDy / sumDt;
+            velocityRef.current.y = sumDx / sumDt;
+          }
+        }
         isDraggingRef.current = false;
         setIsGrabbing(false);
       }
@@ -1089,12 +1289,12 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
       {/* Interactive orb area overlay */}
       <div 
-        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] z-35 rounded-full transition-all duration-200"
+        className="orb-interactive-overlay fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] z-35 rounded-full transition-all duration-200"
         style={{
           cursor: isGrabbing ? 'grabbing' : 'grab',
           pointerEvents: 'auto',
-          backgroundColor: isHovering ? 'rgba(255, 78, 66, 0.02)' : 'transparent',
-          border: isHovering ? '1px solid rgba(255, 78, 66, 0.1)' : '1px solid transparent'
+          backgroundColor: isHovering ? `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.02)` : 'transparent',
+          border: isHovering ? `1px solid rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.1)` : '1px solid transparent'
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -1112,14 +1312,14 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       <div className="fixed inset-0 pointer-events-none z-20"
            style={{
              backgroundImage: `
-               linear-gradient(to right, rgba(255, 240, 230, 0.02) 1px, transparent 1px),
-               linear-gradient(to bottom, rgba(255, 240, 230, 0.02) 1px, transparent 1px)
+               linear-gradient(to right, rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.03) 1px, transparent 1px),
+               linear-gradient(to bottom, rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.03) 1px, transparent 1px)
              `,
              backgroundSize: '40px 40px'
            }} />
 
       {/* Circular visualizer */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] pointer-events-none z-30">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] pointer-events-none z-30 overflow-visible">
         <canvas
           ref={circularCanvasRef}
           width={650}
@@ -1129,8 +1329,8 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       </div>
 
       {/* Audio wave rings */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] pointer-events-none z-20">
-        <div className="w-full h-full rounded-full border border-red-400/10 relative">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] pointer-events-none z-20 overflow-visible">
+        <div className="w-full h-full rounded-full border border-red-400/10 relative overflow-visible">
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full h-full rounded-full border border-red-400/5 animate-pulse" 
                style={{ 
                  animation: 'pulse 4s infinite',
@@ -1173,6 +1373,9 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
             height: 100%;
             opacity: 0.5;
           }
+        }
+        .orb-interactive-overlay {
+          transition: background-color 300ms ease, border-color 300ms ease;
         }
       `}</style>
     </>

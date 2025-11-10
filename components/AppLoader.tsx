@@ -19,11 +19,11 @@ export default function AppLoader({ isLoading }: AppLoaderProps) {
       transition={{ duration: 0.3 }}
     >
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ scale: 0.5, opacity: 0 }}
+        animate={{ scale: .6, opacity: 1 }}
         transition={{ delay: 0.1, duration: 0.5 }}
       >
-  <LoaderCircle className="animate-spin text-black dark:text-white" size={64} />
+      <LoaderCircle className="animate-spin text-black dark:text-white" size={64} />
       </motion.div>
     </motion.div>
   );
