@@ -6,6 +6,7 @@ import { useEncryptedWallet } from './EncryptedWalletProvider';
 import { Button } from '@/components/ui/button';
 import { Pill } from 'lucide-react';
 import GetInModal from './GetInModal';
+import AddMintButton from './AddMintButton';
 import UserModal from './UserModal';
 import { User } from 'lucide-react';
 import Image from 'next/image';
@@ -146,15 +147,18 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
           {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
         </div>
       ) : (
-        <div className='fixed top-3 right-2 md:right-4 z-100'>
-          <Button
-            onClick={() => setShowGetInModal(true)}
-            className="title rounded-md px-2 md:px-6 py-4 md:py-2 text-xs md:text-sm bg-background/50 hover:bg-[#000] text-foreground cursor-pointer select-none"
-            {...buttonProps}
-          >
-            <span className="hidden md:inline">{children || 'ENTRAR'}</span>
-            <Pill className='ml-0 md:ml-2' />
-          </Button>
+        <div className='fixed top-3 right-2 md:right-4 z-100 flex items-center'>
+          <AddMintButton />
+          <div>
+            <Button
+              onClick={() => setShowGetInModal(true)}
+              className="title rounded-md px-2 md:px-6 py-4 md:py-2 text-xs md:text-sm bg-background/50 hover:bg-[#000] text-foreground cursor-pointer select-none"
+              {...buttonProps}
+            >
+              <span className="hidden md:inline">{children || 'ENTRAR'}</span>
+              <Pill className='ml-0 md:ml-2' />
+            </Button>
+          </div>
         </div>
       )}
       {showGetInModal && <GetInModal onClose={() => setShowGetInModal(false)} />}

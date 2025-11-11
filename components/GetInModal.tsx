@@ -159,12 +159,12 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-background text-foreground max-w-xs text-sm z-100">
-                                  <div>
-                    Conecta o crea tu cuenta usando tu billetera o frase semilla.<br />
-                    <span className="text-foreground underline">
-                      <a href="/support" target="_blank" rel="noopener noreferrer">¿Necesitas ayuda? Visita Soporte</a>
-                    </span>
-                  </div>
+                <div>
+                  Conecta o crea tu cuenta usando tu billetera o frase semilla.<br />
+                  <span className="text-foreground underline">
+                    <a href="/support" target="_blank" rel="noopener noreferrer">¿Necesitas ayuda? Visita Soporte</a>
+                  </span>
+                </div>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -276,6 +276,7 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
             }}
           />
         )}
+        {/* Mint button removed from this modal - use global AddMintButton in the navbar */}
         {/* Terms */}
         <div className="w-full rounded-b-2xl text-center text-xs text-foreground tracking-wider p-6 px-8">
           By Signing In, you agree to our <Link href="/terms" className="hover:text-accent-primary">Terms of Service</Link> and <Link href="/privacy" className="hover:text-accent-primary">Privacy Policy</Link>

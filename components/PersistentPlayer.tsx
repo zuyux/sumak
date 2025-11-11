@@ -55,10 +55,18 @@ export default function PersistentPlayer() {
   setImageError(false);
   setImageLoading(false);
   };
+  
+  const openImageModal = useCallback((e?: React.SyntheticEvent) => {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    setImageLoading(true);
+    setShowImageModal(true);
+  }, []);
   const [localVolume, setLocalVolume] = useState(volume);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const playerRef = useRef<HTMLDivElement | null>(null);
+  const innerRef = useRef<HTMLDivElement | null>(null);
 
   // Helper functions to extract metadata from new structure
   const getAttributeValue = useCallback((metadata: unknown, traitType: string): string => {
@@ -198,34 +206,117 @@ export default function PersistentPlayer() {
     setVolume(newVolume); // Update global state
   };
 
+  // Measure persistent player height and expose it to the rest of the app
+  useEffect(() => {
+    // Prefer measuring the inner content's natural size (scrollHeight) so
+    // the outer container can be height:0 initially and animate to the
+    // measured value on hover. Fall back to playerRef if innerRef missing.
+    const target = innerRef.current ?? playerRef.current;
+    if (!target) return;
+
+    const publishHeight = (height: number) => {
+      try {
+        document.documentElement.style.setProperty('--persistent-player-height', `${height}px`);
+      } catch {
+        // ignore style mutation errors on some SSR contexts
+      }
+      // Also publish the visible timeline height so the outer container
+      // can remain visible (showing the timeline) while the inner
+      // controls animate in on hover.
+      try {
+        const timelineEl = playerRef.current?.querySelector('.player-timeline-wrapper') as HTMLElement | null;
+        // Prefer scrollHeight/content size, fall back to bounding rect/offsetHeight, finally to 6px
+        const timelineH = (timelineEl && (timelineEl.scrollHeight || timelineEl.getBoundingClientRect().height || timelineEl.offsetHeight)) || 6;
+        document.documentElement.style.setProperty('--persistent-player-timeline-height', `${timelineH}px`);
+      } catch {
+        // ignore
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('persistent-player-height', { detail: { height } }));
+      } catch {
+        // ignore gracefully
+      }
+    };
+
+    // Initial publish using scrollHeight for natural content height
+  const initialHeight = (innerRef.current && innerRef.current.scrollHeight) || target.getBoundingClientRect().height || 0;
+    publishHeight(initialHeight);
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // entry.contentRect.height reflects layout height; for content-driven
+        // size we prefer scrollHeight of the element when available.
+        const el = entry.target as HTMLElement;
+        const h = el.scrollHeight || entry.contentRect.height || 0;
+        publishHeight(h);
+      }
+    });
+
+    ro.observe(target as Element);
+
+    return () => {
+      try {
+        ro.disconnect();
+      } catch {
+        // ignore
+      }
+    };
+  }, [isExpanded]);
+
   // Don't render if no current album
   if (!currentAlbum?.metadata) {
     return null;
   }
 
   // Floating centered-left cover while playing
-  const floatingCover = isPlaying && currentAlbum?.metadata?.image ? (
-    <div className="hidden md:flex fixed left-4 top-1/2 transform -translate-y-1/2 z-50">
-      <div className="cover-hover-wrapper w-40 h-40 rounded-lg overflow-hidden shadow-lg">
-          <div
-            className="cover-scale w-full h-full relative"
-            onClick={(e) => { e.stopPropagation(); setShowImageModal(true); }}
-            role="button"
-            aria-label="Open floating cover fullscreen"
-          >
-            <Image
-              src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
-              alt={getTitle(currentAlbum.metadata)}
-              width={210}
-              height={210}
-              className="w-full h-full object-cover"
-              onError={handleImageError}
-            />
+  const floatingCover = isPlaying && currentAlbum?.metadata?.image && !showImageModal ? (
+    <div className="hidden md:flex fixed left-4 top-1/2 transform -translate-y-1/2 z-50 items-center floating-cover">
+      <div
+        className="cover-hover-wrapper w-40 h-40 rounded-lg overflow-hidden shadow-lg"
+        tabIndex={0}
+        role="button"
+        aria-label={`Open ${getTitle(currentAlbum.metadata)} cover`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openImageModal(e);
+          }
+        }}
+      >
+        <div className="cover-scale w-full h-full relative">
+          <Image
+            src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
+            alt={getTitle(currentAlbum.metadata)}
+            width={210}
+            height={210}
+            className="cursor-pointer w-full h-full object-cover"
+            onClick={openImageModal}
+            onError={handleImageError}
+            onLoadingComplete={() => setImageLoading(false)}
+            style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 240ms ease' }}
+          />
+        </div>
+      </div>
+
+      {/* Info panel shown to the right when hovering/focusing the cover */}
+      <div className="cover-hover-info ml-3 pointer-events-none opacity-0 transform translate-x-0 transition-all duration-220">
+        <div
+          className="cover-hover-info-inner bg-black/60 backdrop-blur rounded-md px-3 py-2 cursor-pointer"
+          onClick={() => navigateToCurrentNFT()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              navigateToCurrentNFT();
+            }
+          }}
+        >
+          <div className="text-sm font-semibold text-white truncate" title={getTitle(currentAlbum.metadata)}>
+            {getTitle(currentAlbum.metadata)}
           </div>
-        <div className="cover-overlay pointer-events-none">
-          <div className="cover-overlay-inner">
-            <div className="cover-title" title={getTitle(currentAlbum.metadata)}>{getTitle(currentAlbum.metadata)}</div>
-            <div className="cover-artist" title={getArtist(currentAlbum.metadata)}>{getArtist(currentAlbum.metadata)}</div>
+          <div className="text-xs text-white/80 truncate" title={getArtist(currentAlbum.metadata)}>
+            {getArtist(currentAlbum.metadata)}
           </div>
         </div>
       </div>
@@ -261,11 +352,21 @@ export default function PersistentPlayer() {
                   fill
                   priority
                   className="object-contain w-full h-full"
+                  onLoadingComplete={() => setImageLoading(false)}
+                  onError={handleImageError}
                 />
               </div>
+              {imageLoading && (
+                <div className="absolute inset-0 z-70 flex items-center justify-center pointer-events-none">
+                  <div className="cover-spinner" role="status" aria-live="polite">
+                    <span className="sr-only">Loading cover</span>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={(e) => { e.stopPropagation(); setShowImageModal(false); }}
-                className="absolute top-4 right-4 bg-black bg-opacity-60 text-white p-2 rounded z-80"
+                className="cursor-pointer absolute top-4 right-4 bg-black bg-opacity-60 text-white p-2 rounded z-80"
                 aria-label="Close image"
               >
                 <X size={20} />
@@ -273,8 +374,8 @@ export default function PersistentPlayer() {
             </div>
           </div>
         )}
-  <div className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 persistent-player`}>
-    {/* Top timeline spanning full width of the player */}
+  <div ref={playerRef} className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 persistent-player`}>
+    {/* Top timeline spanning full width of the player (kept outside the collapsing inner area so it's always visible) */}
     <div
       className="player-timeline-wrapper"
       onClick={handleTimelineClick}
@@ -289,6 +390,7 @@ export default function PersistentPlayer() {
         style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
       />
     </div>
+    <div ref={innerRef} className="persistent-player-inner">
         {/* Collapsed view - Grid layout similar to Spotify */}
         {!isExpanded && (
           <div className="grid grid-cols-[1fr_2fr_1fr] items-center px-0 py-0 h-20 gap-2 pp-controls">
@@ -315,6 +417,7 @@ export default function PersistentPlayer() {
                     className="object-cover"
                     onError={handleImageError}
                     onLoad={handleImageLoad}
+                    style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
                   />
                 ) : (
                   <Image
@@ -325,11 +428,12 @@ export default function PersistentPlayer() {
                     priority
                     className="object-cover"
                     onLoad={handleImageLoad}
+                    style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
                   />
                 )}
                 {/* Make the cover itself clickable to open the fullscreen modal */}
                 <div
-                  onClick={(e) => { e.stopPropagation(); setShowImageModal(true); }}
+                  onClick={openImageModal}
                   role="button"
                   aria-label="Open cover fullscreen"
                   className="absolute inset-0 z-30"
@@ -392,6 +496,15 @@ export default function PersistentPlayer() {
                   <SkipBack size={16} />
         </button>
         )}
+              {!isMobile && (
+                <button
+                  onClick={togglePlayPause}
+                  className="w-8 h-8 rounded-full bg-transparent text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer mx-2"
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                </button>
+              )}
         {!isMobile && (
                 <button
                   onClick={handleNextTrack}
@@ -465,6 +578,7 @@ export default function PersistentPlayer() {
                 className="object-cover"
                 sizes="64px"
                 priority
+                style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
                 onError={(e) => {
                   // Silently handle image loading errors (often due to IPFS gateway timeouts)
                   const img = e.target as HTMLImageElement;
@@ -649,7 +763,7 @@ export default function PersistentPlayer() {
         </div>
       )}
 
-      <style jsx>{`
+  <style jsx>{`
         .slider {
           background: linear-gradient(to right, white 0%, white ${localVolume * 100}%, #404040 ${localVolume * 100}%, #404040 100%);
           outline: none;
@@ -716,29 +830,57 @@ export default function PersistentPlayer() {
 
         /* On desktop hide persistent player controls until hover; on mobile always show */
         @media (min-width: 768px) {
+          /* outer container remains visible so timeline (outside inner) can be shown */
+          .persistent-player {
+            /* Keep the outer player visible at the timeline height by default */
+            height: var(--persistent-player-timeline-height, 6px);
+            overflow: visible;
+            transition: height 260ms cubic-bezier(.2,.9,.2,1), background-color 220ms ease-in-out, backdrop-filter 220ms ease-in-out;
+          }
+
+          /* inner content collapses via max-height so the timeline stays visible */
+          .persistent-player-inner {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 260ms cubic-bezier(.2,.9,.2,1);
+          }
+
+          .persistent-player:hover .persistent-player-inner,
+          .persistent-player.expanded .persistent-player-inner {
+            max-height: var(--persistent-player-height);
+          }
+
+          /* background/blur apply to outer when hovered or expanded */
+          .persistent-player:hover,
+          .persistent-player.expanded {
+            /* Amplify the whole player area to the measured full height */
+            height: var(--persistent-player-height);
+            background-color: rgba(10, 10, 10, 0.22);
+            backdrop-filter: blur(12px);
+          }
+
           .persistent-player .pp-controls {
             opacity: 0;
             pointer-events: none;
             transition: opacity 180ms ease-in-out;
           }
 
-          .persistent-player:hover .pp-controls {
+          .persistent-player:hover .pp-controls,
+          .persistent-player.expanded .pp-controls {
             opacity: 1;
             pointer-events: auto;
           }
         }
 
-        /* Initial transparent background for persistent player; on hover make it blurred and opaque */
-        .persistent-player {
-          background: transparent;
-          backdrop-filter: none;
-          transition: background-color 220ms ease-in-out, backdrop-filter 220ms ease-in-out;
-        }
-
-        .persistent-player:hover {
-          /* match bg-background/30 roughly: use a translucent layer and blur */
-          background-color: rgba(10, 10, 10, 0.22);
-          backdrop-filter: blur(12px);
+        /* Mobile: keep normal flow (no collapsing) */
+        @media (hover: none) and (pointer: coarse), (max-width: 767px) {
+          .persistent-player {
+            height: auto;
+            overflow: visible;
+            background: transparent;
+            backdrop-filter: none;
+          }
+          .persistent-player-inner { max-height: none; }
         }
 
         /* Cover hover expand and overlay */
@@ -815,6 +957,46 @@ export default function PersistentPlayer() {
           }
         }
 
+        /* Floating cover: reveal an info panel to the right on hover/focus */
+        .floating-cover { display: flex; align-items: center; gap: 0.75rem; }
+
+        .cover-hover-info {
+          transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.9,.2,1);
+          opacity: 0;
+          transform: translateX(-6px);
+          pointer-events: none;
+          display: flex;
+          align-items: center;
+          position: relative;
+          z-index: 80; /* above the scaled cover */
+        }
+
+        .cover-hover-info-inner {
+          pointer-events: none; /* become active only when visible */
+          max-width: 220px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        /* Show info panel when either the cover wrapper or the whole floating container is hovered/focused.
+           This keeps the panel visible while moving the pointer from the image to the panel. */
+        .cover-hover-wrapper:hover + .cover-hover-info,
+        .cover-hover-wrapper:focus + .cover-hover-info,
+        .cover-hover-wrapper:focus-within + .cover-hover-info,
+        .floating-cover:hover .cover-hover-info,
+        .floating-cover:focus-within .cover-hover-info {
+          opacity: 1;
+          transform: translateX(0);
+          pointer-events: auto;
+        }
+
+        /* When visible, make inner panel interactive */
+        .floating-cover:hover .cover-hover-info-inner,
+        .floating-cover:focus-within .cover-hover-info-inner {
+          pointer-events: auto;
+        }
+
         /* On touch devices, show a smaller static overlay to ensure title/artist visibility */
         @media (hover: none) and (pointer: coarse) {
           .cover-overlay { opacity: 1; }
@@ -824,13 +1006,16 @@ export default function PersistentPlayer() {
         /* Player timeline at top border */
         .player-timeline-wrapper {
           position: absolute;
-          top: 0;
+          bottom: 0;
           left: 0;
           right: 0;
-          height: 6px;
+          height: 8px;
           cursor: pointer;
-          background: rgba(255,255,255,0.04);
-          z-index: 70;
+          background: rgba(255,255,255,0.08);
+          z-index: 96;
+          border-radius: 6px;
+          margin: 6px 8px 6px 8px;
+          overflow: hidden;
         }
 
         .player-timeline-fill {
@@ -838,8 +1023,24 @@ export default function PersistentPlayer() {
           background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.6));
           transition: width 120ms linear;
         }
+
+        /* Fullscreen cover loading spinner */
+        .cover-spinner {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          border: 4px solid rgba(255,255,255,0.12);
+          border-top-color: rgba(255,255,255,0.95);
+          animation: cover-spin 0.9s linear infinite;
+        }
+
+        @keyframes cover-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
     </div>
+  </div>
     </>
   );
 }

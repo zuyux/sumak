@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { SearchModal } from './SearchModal';
 import GetInModal from './GetInModal';
+import AddMintButton from './AddMintButton';
 import { useFullscreenContext } from './FullscreenProvider';
 
 export const Navbar = () => {
@@ -56,7 +57,8 @@ export const Navbar = () => {
         </div>
       </nav>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
+  {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
+  <AddMintButton />
 
       <style jsx>{`
         .mobile-hide-placeholder::placeholder {

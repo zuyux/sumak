@@ -261,6 +261,7 @@ export default function MintPage() {
   const [error, setError] = useState<string>('');
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [lastTxId, setLastTxId] = useState<string>('');
+  const [quickUploadData, setQuickUploadData] = useState<unknown | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
 
   const [deployingContract, setDeployingContract] = useState<boolean>(false);
@@ -664,9 +665,9 @@ export default function MintPage() {
       errors.artist = 'Artist name must be less than 100 characters';
     }
     
-    if (!audioFile) {
+    if (!audioFile && !quickUploadData) {
       errors.audioFile = 'Por favor sube un archivo de audio';
-    } else {
+    } else if (audioFile) {
       // Additional file validation
       const validExtensions = ['.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg'];
       const fileExtension = '.' + audioFile.name.split('.').pop()?.toLowerCase();
@@ -1444,7 +1445,26 @@ export default function MintPage() {
     setError('');
 
     try {
-      // Step 1: Upload to IPFS with progress
+      // Step 1: Upload to IPFS with progress (skipped when quickUploadData is present)
+  let responseData: {
+                    metadataCid?: string;
+                    audioUrl?: string;
+                    audioCid?: string;
+                    imageUrl?: string;
+                    imageCid?: string;
+                    audioFormat?: string;
+                    fileSizeBytes?: number;
+                    durationSeconds?: number;
+                    attributes?: Record<string, unknown>;
+                    metadata?: Record<string, unknown>;
+                    tokenId?: number;
+                    token_id?: number;
+                    id?: number;
+                    preventContractUpload?: boolean;
+                    validationErrors?: string[];
+                    error?: string;
+                  } = {};
+
       const formData = new FormData();
       formData.append('file', audioFile!);
 
@@ -1552,26 +1572,7 @@ export default function MintPage() {
         strategy: shouldUseBlobUpload ? 'blob-based' : 'direct'
       });
 
-      let responseData: {
-                    metadataCid?: string;
-                    audioUrl?: string;
-                    audioCid?: string;
-                    imageUrl?: string;
-                    imageCid?: string;
-                    audioFormat?: string;
-                    fileSizeBytes?: number;
-                    durationSeconds?: number;
-                    attributes?: Record<string, unknown>;
-                    metadata?: Record<string, unknown>;
-                    tokenId?: number;
-                    token_id?: number;
-                    id?: number;
-                    preventContractUpload?: boolean;
-                    validationErrors?: string[];
-                    error?: string;
-                  };
-      
-      if (shouldUseBlobUpload) {
+  if (shouldUseBlobUpload) {
         // Use blob-based upload for large files
         console.log('Using blob-based upload for large files...');
         try {
@@ -1678,7 +1679,7 @@ export default function MintPage() {
         }
 
         responseData = await metadataResponse.json();
-      }
+  }
 
       const sanitizedCid = responseData.metadataCid?.trim();
 
@@ -1892,7 +1893,7 @@ export default function MintPage() {
     return null;
   };
 
-  const getLocationForJson = () => {
+  function getLocationForJson() {
     // Only include location if both lat and lng are provided and valid
     if (latitude && longitude) {
       const lat = parseFloat(latitude);
@@ -1919,6 +1920,30 @@ export default function MintPage() {
   useEffect(() => {
     setHydrated(true);
   }, []);
+
+  // Read prefill and quick-upload results from sessionStorage (if they exist)
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const prefillRaw = typeof window !== 'undefined' ? sessionStorage.getItem('mint_prefill') : null;
+      if (prefillRaw) {
+        const prefill = JSON.parse(prefillRaw);
+        if (prefill.name) setName(prefill.name);
+        if (prefill.artist) setArtist(prefill.artist);
+      }
+
+      const quickRaw = typeof window !== 'undefined' ? sessionStorage.getItem('mint_quick_upload') : null;
+      if (quickRaw) {
+        const quick = JSON.parse(quickRaw);
+        setQuickUploadData(quick);
+        if (quick.imageUrl) setImagePreviewUrl(quick.imageUrl);
+        if (quick.audioUrl) setAudioPreviewUrl(quick.audioUrl);
+        // keep audioFile/imageFile as null since we only have URLs from quick upload
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     return () => {
