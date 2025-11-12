@@ -270,7 +270,7 @@ export default function PersistentPlayer() {
 
   // Floating centered-left cover while playing
   const floatingCover = isPlaying && currentAlbum?.metadata?.image && !showImageModal ? (
-    <div className="hidden md:flex fixed left-4 top-1/2 transform -translate-y-1/2 z-50 items-center floating-cover">
+    <div className="hidden opacity-0 md:flex fixed left-4 top-1/2 transform -translate-y-1/2 z-50 items-center floating-cover">
       <div
         className="cover-hover-wrapper w-40 h-40 rounded-lg overflow-hidden shadow-lg"
         tabIndex={0}
@@ -828,20 +828,21 @@ export default function PersistentPlayer() {
           box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 1px 3px rgba(0, 0, 0, 0.3);
         }
 
-        /* On desktop hide persistent player controls until hover; on mobile always show */
+        /* Always show persistent player on desktop */
         @media (min-width: 768px) {
-          /* outer container remains visible so timeline (outside inner) can be shown */
+          /* outer container always visible */
           .persistent-player {
-            /* Keep the outer player visible at the timeline height by default */
-            height: var(--persistent-player-timeline-height, 6px);
+            height: var(--persistent-player-height);
             overflow: visible;
+            background-color: rgba(10, 10, 10, 0.22);
+            backdrop-filter: blur(12px);
             transition: height 260ms cubic-bezier(.2,.9,.2,1), background-color 220ms ease-in-out, backdrop-filter 220ms ease-in-out;
           }
 
-          /* inner content collapses via max-height so the timeline stays visible */
+          /* inner content always visible */
           .persistent-player-inner {
-            max-height: 0;
-            overflow: hidden;
+            max-height: var(--persistent-player-height);
+            overflow: visible;
             transition: max-height 260ms cubic-bezier(.2,.9,.2,1);
           }
 
@@ -850,7 +851,7 @@ export default function PersistentPlayer() {
             max-height: var(--persistent-player-height);
           }
 
-          /* background/blur apply to outer when hovered or expanded */
+          /* background/blur always applied */
           .persistent-player:hover,
           .persistent-player.expanded {
             /* Amplify the whole player area to the measured full height */
@@ -860,8 +861,8 @@ export default function PersistentPlayer() {
           }
 
           .persistent-player .pp-controls {
-            opacity: 0;
-            pointer-events: none;
+            opacity: 1;
+            pointer-events: auto;
             transition: opacity 180ms ease-in-out;
           }
 
@@ -943,12 +944,12 @@ export default function PersistentPlayer() {
           max-width: 160px;
         }
 
-        /* Only apply hover scaling on devices that support hover to avoid mobile surprises */
+        /* Only apply hover effects on devices that support hover to avoid mobile surprises */
         @media (hover: hover) and (pointer: fine) {
           .cover-hover-wrapper:hover .cover-scale {
-            transform: scale(2);
+            transform: none;
             z-index: 60;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            box-shadow: none;
           }
 
           .cover-hover-wrapper:hover .cover-overlay {

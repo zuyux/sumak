@@ -557,6 +557,26 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [volume]);
 
+  // Helper to call play() safely and suppress AbortError (common when play is
+  // interrupted by a pause/load). Returns true if play succeeded.
+  const safePlay = useCallback(async (): Promise<boolean> => {
+    try {
+      if (!audioRef.current) return false;
+      await audioRef.current.play();
+      return true;
+    } catch (error: unknown) {
+      // Ignore benign AbortError caused by concurrent pause/load
+      const e = error as { name?: string; message?: string } | undefined;
+      if (e && (e.name === 'AbortError' || /interrupt/i.test(String(e.message || '')))) {
+        // Debug-level log only
+        console.debug('Audio play was interrupted (ignored):', e.message || e);
+        return false;
+      }
+      console.error('Error playing audio:', error);
+      return false;
+    }
+  }, []);
+
   const setCurrentAlbum = useCallback((album: Album) => {
     setCurrentAlbumState(album);
     if (album.metadata) {
@@ -569,13 +589,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play().catch((error) => {
-          console.error('Error playing audio:', error);
-        });
+        // Fire-and-forget safe play; we don't want benign AbortError to spam console
+        void safePlay();
       }
       setIsPlaying(!isPlaying);
     }
-  }, [isPlaying, currentAlbum]);
+  }, [isPlaying, currentAlbum, safePlay]);
 
   const nextTrack = useCallback((autoPlay = false) => {
     if (!currentAlbum) return;
@@ -633,10 +652,11 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     // Auto-play if requested (from auto-advance) or if currently playing
     if ((autoPlay || isPlaying) && nextAlbum.metadata) {
       setTimeout(() => {
-        audioRef.current?.play().catch(console.error);
+        // Try to play, but ignore AbortError
+        void safePlay();
       }, 100);
     }
-  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, isRepeating, setCurrentAlbum]);
+  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, isRepeating, setCurrentAlbum, safePlay]);
 
   const previousTrack = useCallback(() => {
     if (!currentAlbum) return;
@@ -679,10 +699,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     
     if (previousAlbum.metadata && isPlaying) {
       setTimeout(() => {
-        audioRef.current?.play().catch(console.error);
+        void safePlay();
       }, 100);
     }
-  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum]);
+  }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum, safePlay]);
 
   const setVolume = useCallback((newVolume: number) => {
     console.log('setVolume called:', { newVolume, currentVolume: volume });

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_KEY!
@@ -18,9 +18,15 @@ if (typeof window === 'undefined') {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Admin client for server-side operations (bypasses RLS)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+// Create the admin client only on the server to avoid instantiating
+// another GoTrue (auth) client in the browser bundle which can
+// produce the "Multiple GoTrueClient instances detected" warning.
+export const supabaseAdmin: SupabaseClient | undefined =
+  typeof window === 'undefined'
+    ? createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : undefined
