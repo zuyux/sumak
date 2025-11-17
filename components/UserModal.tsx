@@ -147,11 +147,26 @@ export default function UserModal({ onClose }: UserModalProps) {
   };
 
   const handleSignOut = () => {
-    // Clear the sumak session and wallet address
+    // Clear ALL active sessions and wallet data
     if (typeof window !== "undefined") {
-      localStorage.removeItem('4v4_session');
-      localStorage.removeItem('walletAddress'); 
-      window.dispatchEvent(new Event("4v4-session-update"));
+      // Core application storage
+      localStorage.removeItem('sumak_session');
+      localStorage.removeItem('sumak_session_config');
+      localStorage.removeItem('sumak_session_locked');
+      localStorage.removeItem('sumak_encrypted_session');
+      localStorage.removeItem('walletAddress');
+      localStorage.removeItem('sumak_user_email'); // Email association
+      
+      // Clear any wallet-specific encrypted storage (dynamic keys: encrypted_wallet_${address})
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('encrypted_wallet_')) {
+          localStorage.removeItem(key);
+        }
+      }
+      
+      sessionStorage.clear();
+      window.dispatchEvent(new Event("sumak-session-update"));
     }
     setAddress(null); // Also clear in context
     onClose();

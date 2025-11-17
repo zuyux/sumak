@@ -54,11 +54,25 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
     if (typeof window !== "undefined") {
       const checkSession = () => {
         try {
-          const session = localStorage.getItem('4v4_session');
+          const session = localStorage.getItem('sumak_session');
           const hasSession = !!session;
-          console.log('Session check after cleanup:', hasSession, session); // Debug log
+          
+          // Enhanced debugging
+          if (hasSession && session) {
+            const parsed = JSON.parse(session);
+            console.log('✅ Session found:', {
+              hasSession,
+              address: parsed.address,
+              encrypted: parsed.encrypted,
+              timestamp: new Date(parsed.createdAt).toLocaleString()
+            });
+          } else {
+            console.log('❌ No session found in localStorage');
+          }
+          
           setIsSessionLoggedIn(hasSession);
-        } catch {
+        } catch (error) {
+          console.error('⚠️ Error checking session:', error);
           setIsSessionLoggedIn(false);
         }
       };
@@ -70,16 +84,23 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
       window.addEventListener('storage', checkSession);
 
       // Also listen for route changes to update session state after navigation
-      const handleVisibility = () => checkSession();
+      const handleVisibility = () => {
+        console.log('👁️ Visibility changed, rechecking session');
+        checkSession();
+      };
       window.addEventListener('visibilitychange', handleVisibility);
 
       // Listen for custom event after login
-      window.addEventListener('4v4-session-update', checkSession);
+      const handleSessionUpdate = () => {
+        console.log('🔔 Received sumak-session-update event, rechecking session');
+        checkSession();
+      };
+      window.addEventListener('sumak-session-update', handleSessionUpdate);
 
       return () => {
         window.removeEventListener('storage', checkSession);
         window.removeEventListener('visibilitychange', handleVisibility);
-        window.removeEventListener('4v4-session-update', checkSession);
+        window.removeEventListener('sumak-session-update', handleSessionUpdate);
       };
     }
   }, []);
@@ -87,7 +108,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   // Listen for disconnect to update session state
   useEffect(() => {
     if (!isWalletConnected) {
-      const session = localStorage.getItem('4v4_session');
+      const session = localStorage.getItem('sumak_session');
       if (!session) setIsSessionLoggedIn(false);
     }
   }, [isWalletConnected]);

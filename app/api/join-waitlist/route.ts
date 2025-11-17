@@ -18,6 +18,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return new Response(JSON.stringify({ error: "Database not available" }), { status: 500 });
+    }
+
     // Check if email already exists in waitlist
     const { data: existingEmail, error: checkError } = await supabaseAdmin
       .from('waitlist')

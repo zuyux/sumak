@@ -6,11 +6,11 @@ import { useEncryptedWallet } from './EncryptedWalletProvider';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { CircleHelp, X, Shield } from 'lucide-react';
-import { createStacksAccount } from '@/lib/stacksWallet';
 import { useRouter } from 'next/navigation';
 import { PasswordInput } from '@/components/PasswordInput';
 import ConnectModal from './ConnectModal';
 import { formatStxAddress } from '@/lib/address-utils';
+import { toast } from 'sonner';
 
 export default function GetInModal({ onClose }: { onClose?: () => void }) {
   const { address } = useWallet();
@@ -18,7 +18,6 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
     isWalletEncrypted, 
     isAuthenticated: isEncryptedAuthenticated,
     isSessionLocked,
-    createEncryptedWallet,
     unlockWallet,
     authError: encryptedAuthError,
     isLoading: encryptedLoading,
@@ -30,6 +29,13 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showEncryptedWalletFlow, setShowEncryptedWalletFlow] = useState(false);
   const [encryptedWalletMode, setEncryptedWalletMode] = useState<'unlock' | 'create'>('unlock');
+  
+  // Email verification flow states
+  const [showEmailFlow, setShowEmailFlow] = useState(false);
+  const [email, setEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '']);
+  const [emailStep, setEmailStep] = useState<'email' | 'verify'>('email');
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
 
   useEffect(() => {
     if (address && onClose) {
@@ -43,91 +49,164 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
     }
   }, [isEncryptedAuthenticated, onClose]);
 
+  // Handle email submission - sends verification code
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleEncryptedWalletSubmit = async (password: string, email?: string) => {
+    if (!email || !email.includes('@')) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsEmailLoading(true);
+
     try {
-      if (encryptedWalletMode === 'create') {
-        // Generate new wallet data for encryption
-        const { mnemonic, stxPrivateKey, address } = await createStacksAccount();
-        const walletData = {
-          mnemonic,
-          privateKey: stxPrivateKey,
-          address,
-          label: 'sumak'
-        };
-        await createEncryptedWallet(walletData, password);
-        
-        // Save to Supabase if email provided
-        if (email) {
-          try {
-            console.log('Attempting to save account to database...');
-            const response = await fetch('/api/save-account', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email,
-                passkey: stxPrivateKey, 
-                password,
-                address
-              }),
-            });
-            
-            const result = await response.json();
-            
-            if (!response.ok) {
-              console.warn('Failed to save account to database:', result);
-              console.warn('Account creation will continue without database save');
-              // Don't throw error - continue with wallet creation even if DB save fails
-            } else {
-              console.log('Account saved to database successfully:', result);
-            }
-          } catch (dbError) {
-            console.warn('Database save error:', dbError);
-            console.warn('Account creation will continue without database save');
-            // Don't throw error - continue with wallet creation even if DB save fails
-          }
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
 
-          // Send confirmation email with address
-          try {
-            const mailRes = await fetch('/api/wallet-connect/account-created', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, address }),
-            });
-            const mailResult = await mailRes.json();
-            if (!mailRes.ok) {
-              console.warn('Failed to send confirmation email:', mailResult);
-            } else {
-              console.log('Confirmation email sent:', mailResult);
-            }
-          } catch (mailError) {
-            console.warn('Error sending confirmation email:', mailError);
-          }
-        }
-        
-        // Redirect to welcome page with email
-        const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
-        router.push(`/welcome${emailParam}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send verification code');
+      }
+
+      toast.success('Verification code sent to your email!');
+      setEmailStep('verify');
+    } catch (error) {
+      console.error('Email submission error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send verification code');
+    } finally {
+      setIsEmailLoading(false);
+    }
+  };
+
+  // Handle verification code change
+  const handleCodeChange = (index: number, value: string) => {
+    if (value && !/^\d$/.test(value)) return;
+
+    const newCode = [...verificationCode];
+    newCode[index] = value;
+    setVerificationCode(newCode);
+
+    // Auto-focus next input
+    if (value && index < 4) {
+      const nextInput = document.getElementById(`modal-code-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  // Handle paste event - fill all inputs at once
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    
+    // Only accept 5 digits
+    if (/^\d{5}$/.test(pastedData)) {
+      const newCode = pastedData.split('');
+      setVerificationCode(newCode);
+      // Focus the last input after paste
+      setTimeout(() => {
+        const lastInput = document.getElementById('modal-code-4');
+        lastInput?.focus();
+      }, 0);
+    }
+  };
+
+  // Handle verification code submission
+  const handleVerificationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const code = verificationCode.join('');
+    if (code.length !== 5) {
+      toast.error('Please enter the complete 5-digit code');
+      return;
+    }
+
+    setIsEmailLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to verify code');
+      }
+
+      toast.success('Email verified! Redirecting...');
+      
+      // Store email in sessionStorage for password setup page
+      sessionStorage.setItem('signup_email', email);
+      
+      // Close modal and redirect to password setup
+      if (onClose) onClose();
+      router.push('/setup-password');
+    } catch (error) {
+      console.error('Verification error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to verify code');
+      setVerificationCode(['', '', '', '', '']);
+    } finally {
+      setIsEmailLoading(false);
+    }
+  };
+
+  // Resend verification code
+  const handleResendCode = async () => {
+    setIsEmailLoading(true);
+    try {
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend code');
+      }
+
+      toast.success('New verification code sent!');
+      setVerificationCode(['', '', '', '', '']);
+    } catch (error) {
+      console.error('Resend error:', error);
+      toast.error('Failed to resend code');
+    } finally {
+      setIsEmailLoading(false);
+    }
+  };
+
+
+  const handleEncryptedWalletSubmit = async (password: string) => {
+    try {
+      // Only used for unlocking existing wallets
+      await unlockWallet(password);
+      if (walletInfo) {
+        router.push(`/${walletInfo.address}`);
         if (onClose) onClose();
-      } else {
-        await unlockWallet(password);
-        if (walletInfo) {
-          // For existing wallets, redirect to the address page
-          router.push(`/${walletInfo.address}`);
-          if (onClose) onClose();
-        }
       }
     } catch (error) {
-      // Error will be handled by the PassphraseInput component
       console.error('Encrypted wallet operation failed:', error);
     }
   };
 
   const handleShowEncryptedWallet = () => {
-    setEncryptedWalletMode(isWalletEncrypted ? 'unlock' : 'create');
-    setShowEncryptedWalletFlow(true);
+    if (isWalletEncrypted) {
+      // If wallet exists, show unlock flow
+      setEncryptedWalletMode('unlock');
+      setShowEncryptedWalletFlow(true);
+    } else {
+      // If no wallet, show email verification flow
+      setShowEmailFlow(true);
+      setEmailStep('email');
+    }
   };
 
   return (
@@ -179,8 +258,108 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
         </div>
         {/* Auth Options - Conditional rendering based on flow */}
         <div className="w-full flex flex-col gap-3 px-6 mb-3">
-          {/* Auth options: Connect Wallet, Encrypted Wallet, Email, Mnemonic */}
-          {showEncryptedWalletFlow ? (
+          {/* Email Verification Flow */}
+          {showEmailFlow ? (
+            <div className="space-y-4">
+              {emailStep === 'email' ? (
+                /* Email Input Step */
+                <>
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      Crear Cuenta
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Ingresa tu correo electrónico para comenzar
+                    </p>
+                  </div>
+                  
+                  <form onSubmit={handleEmailSubmit} className="space-y-4">
+                    <div>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="tu@correo.com"
+                        className="w-full px-4 py-3 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+                        disabled={isEmailLoading}
+                        required
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={isEmailLoading}
+                      className="w-full h-12 rounded-[9px] bg-[#0000ff] hover:bg-[#0000ff] text-foreground font-semibold cursor-pointer"
+                    >
+                      {isEmailLoading ? 'Enviando...' : 'Enviar Código'}
+                    </Button>
+                  </form>
+                </>
+              ) : (
+                /* Verification Code Step */
+                <>
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      Verifica tu Correo
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Enviamos un código de 5 dígitos a
+                    </p>
+                    <p className="font-medium text-foreground text-sm">{email}</p>
+                  </div>
+
+                  <form onSubmit={handleVerificationSubmit} className="space-y-4">
+                    <div className="flex justify-center gap-2" onPaste={handlePaste}>
+                      {verificationCode.map((digit, index) => (
+                        <input
+                          key={index}
+                          id={`modal-code-${index}`}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleCodeChange(index, e.target.value)}
+                          autoComplete="off"
+                          className="w-12 h-12 text-center text-xl font-bold rounded-lg border-2 border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-foreground"
+                          disabled={isEmailLoading}
+                          required
+                        />
+                      ))}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={isEmailLoading || verificationCode.join('').length !== 5}
+                      className="w-full h-12 rounded-[9px] bg-[#0000ff] hover:bg-[#0000ff] text-foreground font-semibold cursor-pointer"
+                    >
+                      {isEmailLoading ? 'Verificando...' : 'Verificar Código'}
+                    </Button>
+
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      className="w-full text-sm text-muted-foreground hover:text-primary transition-colors"
+                      disabled={isEmailLoading}
+                    >
+                      ¿No recibiste el código? Reenviar
+                    </button>
+
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setShowEmailFlow(false);
+                        setEmailStep('email');
+                        setVerificationCode(['', '', '', '', '']);
+                      }}
+                      className="w-full h-10 rounded-[7px] bg-transparent text-muted-foreground border border-border"
+                    >
+                      Volver
+                    </Button>
+                  </form>
+                </>
+              )}
+            </div>
+          ) : showEncryptedWalletFlow ? (
             /* Encrypted Wallet Flow */
             <div className="space-y-4">
               <div className="text-center">
@@ -211,13 +390,22 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
                   <Button
                     onClick={() => {
                       if (typeof window !== 'undefined') {
-                        localStorage.removeItem('4v4_session');
-                        localStorage.removeItem('4v4_session_config');
-                        localStorage.removeItem('4v4_session_locked');
-                        localStorage.removeItem('4v4_encrypted_session');
-                        localStorage.removeItem('4v4_encrypted_wallet');
-                        localStorage.removeItem('blockstack-session');
-                        localStorage.removeItem('connect-session');
+                        // Clear core application storage
+                        localStorage.removeItem('sumak_session');
+                        localStorage.removeItem('sumak_session_config');
+                        localStorage.removeItem('sumak_session_locked');
+                        localStorage.removeItem('sumak_encrypted_session');
+                        localStorage.removeItem('walletAddress');
+                        localStorage.removeItem('sumak_user_email'); // Email association
+                        
+                        // Clear any wallet-specific encrypted storage (dynamic keys)
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                          const key = localStorage.key(i);
+                          if (key && key.startsWith('encrypted_wallet_')) {
+                            localStorage.removeItem(key);
+                          }
+                        }
+                        
                         sessionStorage.clear();
                         window.location.reload();
                       }

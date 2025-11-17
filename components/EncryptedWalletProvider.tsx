@@ -131,46 +131,46 @@ export const EncryptedWalletProvider: FC<ProviderProps> = ({ children }) => {
     // Listen for storage events
     const handleStorageEvents = (event: Event) => {
       switch (event.type) {
-        case '4v4-encrypted-session-created':
+        case 'sumak-encrypted-session-created':
           setIsWalletEncrypted(true);
           setWalletInfo(getWalletInfo());
           setIsAuthenticated(true);
           setIsSessionLocked(false);
           break;
-        case '4v4-session-locked':
+        case 'sumak-session-locked':
           setIsSessionLocked(true);
           setIsAuthenticated(false);
           setCurrentWallet(null);
           break;
-        case '4v4-session-unlocked':
+        case 'sumak-session-unlocked':
           setIsSessionLocked(false);
           break;
-        case '4v4-session-deleted':
+        case 'sumak-session-deleted':
           setIsWalletEncrypted(false);
           setWalletInfo(null);
           setIsAuthenticated(false);
           setCurrentWallet(null);
           setIsSessionLocked(false);
           break;
-        case '4v4-session-accessed':
+        case 'sumak-session-accessed':
           // Session activity detected, could update UI indicators
           break;
       }
     };
 
     // Add event listeners
-    window.addEventListener('4v4-encrypted-session-created', handleStorageEvents);
-    window.addEventListener('4v4-session-locked', handleStorageEvents);
-    window.addEventListener('4v4-session-unlocked', handleStorageEvents);
-    window.addEventListener('4v4-session-deleted', handleStorageEvents);
-    window.addEventListener('4v4-session-accessed', handleStorageEvents);
+    window.addEventListener('sumak-encrypted-session-created', handleStorageEvents);
+    window.addEventListener('sumak-session-locked', handleStorageEvents);
+    window.addEventListener('sumak-session-unlocked', handleStorageEvents);
+    window.addEventListener('sumak-session-deleted', handleStorageEvents);
+    window.addEventListener('sumak-session-accessed', handleStorageEvents);
 
     return () => {
-      window.removeEventListener('4v4-encrypted-session-created', handleStorageEvents);
-      window.removeEventListener('4v4-session-locked', handleStorageEvents);
-      window.removeEventListener('4v4-session-unlocked', handleStorageEvents);
-      window.removeEventListener('4v4-session-deleted', handleStorageEvents);
-      window.removeEventListener('4v4-session-accessed', handleStorageEvents);
+      window.removeEventListener('sumak-encrypted-session-created', handleStorageEvents);
+      window.removeEventListener('sumak-session-locked', handleStorageEvents);
+      window.removeEventListener('sumak-session-unlocked', handleStorageEvents);
+      window.removeEventListener('sumak-session-deleted', handleStorageEvents);
+      window.removeEventListener('sumak-session-accessed', handleStorageEvents);
     };
   }, []);
 
@@ -253,7 +253,7 @@ export const EncryptedWalletProvider: FC<ProviderProps> = ({ children }) => {
         createdAt: Date.now() 
       });
 
-      // Also save session data for compatibility with other components
+      // Save session data for compatibility with other components
       if (typeof window !== 'undefined') {
         const sessionData = {
           address: walletData.address,
@@ -261,7 +261,14 @@ export const EncryptedWalletProvider: FC<ProviderProps> = ({ children }) => {
           encrypted: true,
           createdAt: Date.now()
         };
-        localStorage.setItem('4v4_session', JSON.stringify(sessionData));
+        localStorage.setItem('sumak_session', JSON.stringify(sessionData));
+        
+        // IMPORTANT: Dispatch session update event for UI to pick up login state
+        console.log('🔔 Dispatching sumak-session-update event for address:', walletData.address);
+        window.dispatchEvent(new Event('sumak-session-update'));
+        
+        // Also dispatch the encrypted session event
+        window.dispatchEvent(new Event('sumak-encrypted-session-created'));
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Failed to create encrypted wallet');
@@ -278,9 +285,9 @@ export const EncryptedWalletProvider: FC<ProviderProps> = ({ children }) => {
     try {
       // Clean up previous session/config before unlocking (robust session logic)
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('4v4_encrypted_session');
-        localStorage.removeItem('4v4_session_config');
-        localStorage.removeItem('4v4_session_locked');
+        localStorage.removeItem('sumak_encrypted_session');
+        localStorage.removeItem('sumak_session_config');
+        localStorage.removeItem('sumak_session_locked');
       }
 
       const walletData = await retrieveEncryptedWallet(passphrase);
@@ -301,7 +308,7 @@ export const EncryptedWalletProvider: FC<ProviderProps> = ({ children }) => {
           encrypted: true,
           createdAt: Date.now()
         };
-        localStorage.setItem('4v4_session', JSON.stringify(sessionData));
+        localStorage.setItem('sumak_session', JSON.stringify(sessionData));
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Failed to unlock wallet');

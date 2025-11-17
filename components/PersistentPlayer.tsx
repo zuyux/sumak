@@ -327,7 +327,7 @@ export default function PersistentPlayer() {
     <>
       {/* Mobile: Title & Artist above persistent player */}
       {isMobile && !isExpanded && (
-  <div className="fixed bottom-20 left-0 right-0 z-50 flex flex-col items-center justify-center bg-transparent py-2 px-4" style={{ fontFamily: 'Chakra Petch, var(--font-chakra-petch), sans-serif' }}>
+      <div className="fixed bottom-20 left-0 right-0 z-50 flex flex-col items-center justify-center bg-black/10 backdrop-blur py-2 px-4" style={{ fontFamily: 'Chakra Petch, var(--font-chakra-petch), sans-serif' }}>
           <span className="text-base font-bold title text-center truncate w-full" title={getTitle(currentAlbum.metadata)}>
             {getTitle(currentAlbum.metadata)}
           </span>
@@ -374,7 +374,15 @@ export default function PersistentPlayer() {
             </div>
           </div>
         )}
-  <div ref={playerRef} className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 persistent-player`}>
+  <div 
+    ref={playerRef} 
+    className={`fixed bottom-0 left-0 right-0 z-50 border-t border-border transition-all duration-300 persistent-player`}
+    style={{
+      backgroundColor: 'rgba(10, 10, 10, 0.1)',
+      backdropFilter: 'blur(40px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(40px) saturate(180%)'
+    }}
+  >
     {/* Top timeline spanning full width of the player (kept outside the collapsing inner area so it's always visible) */}
     <div
       className="player-timeline-wrapper"
@@ -499,7 +507,7 @@ export default function PersistentPlayer() {
               {!isMobile && (
                 <button
                   onClick={togglePlayPause}
-                  className="w-8 h-8 rounded-full bg-transparent text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer mx-2"
+                  className="w-8 h-8 rounded-full bg-black/90 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer mx-2"
                   aria-label={isPlaying ? 'Pause' : 'Play'}
                 >
                   {isPlaying ? <Pause size={16} /> : <Play size={16} />}
@@ -666,7 +674,7 @@ export default function PersistentPlayer() {
                 </button>
                 <button
                   onClick={togglePlayPause}
-                  className="w-12 h-12 rounded-full bg-transparent text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                  className="w-12 h-12 rounded-full bg-black/60 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
                   aria-label={isPlaying ? 'Pause' : 'Play'}
                 >
                   {isPlaying ? <Pause size={24} /> : <Play size={24} />}
@@ -716,7 +724,7 @@ export default function PersistentPlayer() {
                       className={`flex-1 p-3 rounded-l-lg transition-colors text-left hover:bg-muted/50 cursor-pointer ${
                         currentAlbum?.id === album.id
                           ? 'bg-background/20 border border-primary/40 border-r-0'
-                          : 'bg-transparent border border-transparent border-r-0'
+                          : 'bg-black/10 backdrop-blur border border-transparent border-r-0'
                       }`}
                     >
                       <div className="flex items-center space-x-3">
@@ -749,7 +757,7 @@ export default function PersistentPlayer() {
                       className={`p-3 rounded-r-lg transition-colors hover:bg-muted/50 cursor-pointer flex items-center ${
                         currentAlbum?.id === album.id
                           ? 'bg-primary/20 border border-primary/40 border-l-0'
-                          : 'bg-transparent border border-transparent border-l-0'
+                          : 'bg-black/60 backdrop-blur border border-transparent border-l-0'
                       }`}
                       title="View NFT details"
                     >
@@ -834,8 +842,9 @@ export default function PersistentPlayer() {
           .persistent-player {
             height: var(--persistent-player-height);
             overflow: visible;
-            background-color: rgba(10, 10, 10, 0.22);
-            backdrop-filter: blur(12px);
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
             transition: height 260ms cubic-bezier(.2,.9,.2,1), background-color 220ms ease-in-out, backdrop-filter 220ms ease-in-out;
           }
 
@@ -856,8 +865,9 @@ export default function PersistentPlayer() {
           .persistent-player.expanded {
             /* Amplify the whole player area to the measured full height */
             height: var(--persistent-player-height);
-            background-color: rgba(10, 10, 10, 0.22);
-            backdrop-filter: blur(12px);
+            background-color: rgba(10, 10, 10, 0.98);
+            backdrop-filter: blur(50px) saturate(200%);
+            -webkit-backdrop-filter: blur(50px) saturate(200%);
           }
 
           .persistent-player .pp-controls {
@@ -878,8 +888,9 @@ export default function PersistentPlayer() {
           .persistent-player {
             height: auto;
             overflow: visible;
-            background: transparent;
-            backdrop-filter: none;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
           }
           .persistent-player-inner { max-height: none; }
         }

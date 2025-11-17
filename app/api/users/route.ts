@@ -5,6 +5,11 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
 export async function GET() {
+  // Check if supabaseAdmin is available (server-side only)
+  if (!supabaseAdmin) {
+    return NextResponse.json({ error: "Database not available" }, { status: 500 });
+  }
+
   // Fetch addresses from connected_accounts
   const { data: accounts, error: accountsError } = await supabaseAdmin
     .from("connected_accounts")

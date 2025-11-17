@@ -12,6 +12,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ address
 
     console.log(`Fetching profile for address: ${address}`);
 
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Database not available' }, { status: 500 });
+    }
+
     // Case-insensitive search for the address
     const { data, error } = await supabaseAdmin
       .from('profiles')

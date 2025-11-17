@@ -128,7 +128,7 @@ export default function NFTDetailPage() {
 
   // Function to fetch NFT data from database
   const fetchNFTFromDatabase = useCallback(async () => {
-    if (!address || !contractName || !tokenId) return null;
+    if (!address || !contractName || !tokenId || !supabaseAdmin) return null;
     try {
       // Use maybeSingle() to avoid 406 error when no rows
       const { data, error, status } = await supabaseAdmin
@@ -155,7 +155,7 @@ export default function NFTDetailPage() {
 
   // Contract interaction functions
   const checkIfListed = useCallback(async () => {
-    if (!address || !contractName || !tokenId) return;
+    if (!address || !contractName || !tokenId || !supabaseAdmin) return;
     
     try {
       setIsLoading(true);
@@ -354,38 +354,40 @@ export default function NFTDetailPage() {
       }
 
       // Check price from database
-      const { data: nftData, error, status } = await supabaseAdmin
-        .from('nfts')
-        .select('is_listed, list_price, list_currency')
-        .eq('contract_address', address)
-        .eq('contract_name', contractName)
-        .eq('token_id', parseInt(tokenId))
-        .maybeSingle();
-      if (error && status !== 406) {
-        console.warn('Could not fetch NFT price from database:', error);
+      if (supabaseAdmin) {
+        const { data: nftData, error, status } = await supabaseAdmin
+          .from('nfts')
+          .select('is_listed, list_price, list_currency')
+          .eq('contract_address', address)
+          .eq('contract_name', contractName)
+          .eq('token_id', parseInt(tokenId))
+          .maybeSingle();
+        if (error && status !== 406) {
+          console.warn('Could not fetch NFT price from database:', error);
+        }
+
+        // Fallback to default pricing if needed
+        const stxPriceUsd = await fetchStxPrice();
+        let nftPriceStx = 5; // Default fallback price
+
+        // Use database price if available
+        if (nftData?.is_listed && nftData.list_price) {
+          nftPriceStx = nftData.list_price / SATOSHIS_PER_STX;
+          console.log('Using database price:', nftData.list_price, 'satoshis');
+        } else {
+          console.log('No database price found, using default');
+        }
+
+        const priceSatoshis = nftPriceStx * SATOSHIS_PER_STX;
+        const priceUsd = nftPriceStx * stxPriceUsd;
+
+        console.log('Calculated price data:', {
+          stxPriceUsd,
+          nftPriceSatoshis: priceSatoshis,
+          nftPriceStx: nftPriceStx,
+          nftPriceUsd: priceUsd
+        });
       }
-
-      // Fallback to default pricing if needed
-      const stxPriceUsd = await fetchStxPrice();
-      let nftPriceStx = 5; // Default fallback price
-
-      // Use database price if available
-      if (nftData?.is_listed && nftData.list_price) {
-        nftPriceStx = nftData.list_price / SATOSHIS_PER_STX;
-        console.log('Using database price:', nftData.list_price, 'satoshis');
-      } else {
-        console.log('No database price found, using default');
-      }
-
-      const priceSatoshis = nftPriceStx * SATOSHIS_PER_STX;
-      const priceUsd = nftPriceStx * stxPriceUsd;
-
-      console.log('Calculated price data:', {
-        stxPriceUsd,
-        nftPriceSatoshis: priceSatoshis,
-        nftPriceStx: nftPriceStx,
-        nftPriceUsd: priceUsd
-      });
     } catch (error) {
       console.error('Error fetching NFT price:', error);
     } finally {

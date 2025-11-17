@@ -46,6 +46,14 @@ export async function POST(request: NextRequest) {
   try {
     const body: SaveNFTRequest = await request.json();
     
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Database not available' },
+        { status: 500 }
+      );
+    }
+    
     // Validate required fields
     const requiredFields = [
       'tokenId', 'contractAddress', 'contractName', 
@@ -146,6 +154,14 @@ export async function POST(request: NextRequest) {
 // GET endpoint to retrieve NFT data
 export async function GET(request: NextRequest) {
   try {
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Database not available' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const contractAddress = searchParams.get('contractAddress');
     const tokenId = searchParams.get('tokenId');

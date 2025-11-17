@@ -289,24 +289,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const canonical = convertToIpfsIo(rawUrl);
     const candidates: string[] = [];
 
-    // If canonical contains an IPFS hash, enumerate common gateways
+    // If canonical contains an IPFS hash, only use ipfs.io gateway
     const ipfsMatch = canonical.match(/\/ipfs\/(.+)$/);
     if (ipfsMatch && ipfsMatch[1]) {
       const hash = ipfsMatch[1];
-      const gateways = [
-        'https://ipfs.io/ipfs/',
-        'https://cloudflare-ipfs.com/ipfs/',
-        'https://dweb.link/ipfs/',
-        'https://gateway.pinata.cloud/ipfs/'
-      ];
-      for (const g of gateways) {
-        const direct = `${g}${hash}`;
-        // Try direct first, then proxied form (maybeProxy will return proxied path for known hosts)
-        candidates.push(direct);
-        const prox = maybeProxy(direct);
-        if (prox !== direct) candidates.push(prox);
-      }
-      // De-duplicate while preserving order
+      // Only use ipfs.io gateway - simple and reliable
+      const direct = `https://ipfs.io/ipfs/${hash}`;
+      candidates.push(direct);
+      
+      // Also try proxied version as fallback
+      const prox = maybeProxy(direct);
+      if (prox !== direct) candidates.push(prox);
+      
       return Array.from(new Set(candidates));
     }
 
@@ -319,11 +313,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   // Load metadata for a specific album
   const loadMetadata = useCallback(async (album: Album): Promise<NFTMetadata | null> => {
+    // Only use ipfs.io gateway - simple and reliable
     const ipfsGateways = [
       'https://ipfs.io/ipfs/',
-      'https://gateway.pinata.cloud/ipfs/',
-      'https://cloudflare-ipfs.com/ipfs/',
-      'https://dweb.link/ipfs/'
     ];
 
     // Extract IPFS hash from the URL
@@ -379,7 +371,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    console.error('Failed to load metadata from all gateways');
+    console.error('Failed to load metadata from ipfs.io gateway');
     return null;
   }, [convertToIpfsIo]);
 

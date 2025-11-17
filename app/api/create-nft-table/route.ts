@@ -5,6 +5,14 @@ export async function POST() {
   try {
     console.log('Attempting to create nfts table...');
 
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Supabase admin client not available' },
+        { status: 500 }
+      );
+    }
+
     // First, test if the table already exists
     const { error: testError } = await supabaseAdmin
       .from('nfts')

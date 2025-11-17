@@ -30,9 +30,9 @@ export interface SessionConfig {
   requirePassphraseOnTransaction: boolean;
 }
 
-const STORAGE_KEY = '4v4_encrypted_session';
-const CONFIG_KEY = '4v4_session_config';
-const SESSION_LOCK_KEY = '4v4_session_locked';
+const STORAGE_KEY = 'sumak_encrypted_session';
+const CONFIG_KEY = 'sumak_session_config';
+const SESSION_LOCK_KEY = 'sumak_session_locked';
 const CURRENT_VERSION = '1.0.0';
 
 // Default session configuration
@@ -177,7 +177,7 @@ export async function storeEncryptedWallet(
   localStorage.setItem(CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG));
 
   // Dispatch event for UI updates
-  window.dispatchEvent(new Event('4v4-encrypted-session-created'));
+  window.dispatchEvent(new Event('sumak-encrypted-session-created'));
 }
 
 /**
@@ -211,7 +211,7 @@ export async function retrieveEncryptedWallet(passphrase: string): Promise<Walle
     localStorage.setItem(STORAGE_KEY, JSON.stringify(encryptedData));
 
     // Dispatch event for session activity
-    window.dispatchEvent(new Event('4v4-session-accessed'));
+    window.dispatchEvent(new Event('sumak-session-accessed'));
 
     return {
       mnemonic,
@@ -261,7 +261,7 @@ export function lockSession(): void {
   if (typeof window === 'undefined') return;
   
   localStorage.setItem(SESSION_LOCK_KEY, 'true');
-  window.dispatchEvent(new Event('4v4-session-locked'));
+  window.dispatchEvent(new Event('sumak-session-locked'));
 }
 
 /**
@@ -279,7 +279,7 @@ export function unlockSession(): void {
   if (typeof window === 'undefined') return;
   
   localStorage.removeItem(SESSION_LOCK_KEY);
-  window.dispatchEvent(new Event('4v4-session-unlocked'));
+  window.dispatchEvent(new Event('sumak-session-unlocked'));
 }
 
 /**
@@ -304,7 +304,7 @@ export function extendSession(): boolean {
     });
     
     // Dispatch event for session activity
-    window.dispatchEvent(new Event('4v4-session-accessed'));
+    window.dispatchEvent(new Event('sumak-session-accessed'));
     
     return true;
   } catch (error) {
@@ -374,7 +374,7 @@ export function updateSessionConfig(config: Partial<SessionConfig>): void {
   const newConfig = { ...currentConfig, ...config };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(newConfig));
   
-  window.dispatchEvent(new Event('4v4-session-config-updated'));
+  window.dispatchEvent(new Event('sumak-session-config-updated'));
 }
 
 /**
@@ -410,7 +410,7 @@ export function deleteWallet(address: string) {
   localStorage.removeItem(`encrypted_wallet_${address}`);
   localStorage.removeItem(`wallet_config_${address}`);
 
-  window.dispatchEvent(new Event('4v4-session-deleted'));
+  window.dispatchEvent(new Event('sumak-session-deleted'));
 }
 
 /**
@@ -429,7 +429,7 @@ export async function changeWalletPassphrase(
   // Store with new passphrase
   await storeEncryptedWallet(walletData, newPassphrase);
   
-  window.dispatchEvent(new Event('4v4-passphrase-changed'));
+  window.dispatchEvent(new Event('sumak-passphrase-changed'));
 }
 
 /**
@@ -453,7 +453,7 @@ export function tryRestoreSession(): WalletData | null {
     if (!isSessionActive()) return null;
     
     // Try to get session data from localStorage
-    const sessionData = localStorage.getItem('4v4_session');
+    const sessionData = localStorage.getItem('sumak_session');
     if (!sessionData) return null;
     
     const session = JSON.parse(sessionData);

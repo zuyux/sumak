@@ -28,6 +28,14 @@ export async function POST(request: NextRequest) {
       .update(passkey + passphrase)
       .digest('hex');
 
+    // Check if supabaseAdmin is available (server-side only)
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Database not available' },
+        { status: 500 }
+      );
+    }
+
     // Check if email already exists
     const { data: existingAccount, error: checkError } = await supabaseAdmin
       .from('connected_accounts')
