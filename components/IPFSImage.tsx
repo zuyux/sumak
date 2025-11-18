@@ -119,17 +119,17 @@ const IPFSImage: React.FC<IPFSImageProps> = ({
     );
   }
 
-  const imageProps = {
-    src: currentSrc,
-    alt: alt || '',
-    className,
-    onError: handleImageError,
-    onLoad: handleImageLoad,
-    priority,
-    ...(fill ? { fill: true } : { width: width || 400, height: height || 400 })
-  };
-
-  return <Image {...imageProps} />;
+  return (
+    <Image 
+      src={currentSrc}
+      alt={alt}
+      className={className}
+      onError={handleImageError}
+      onLoad={handleImageLoad}
+      priority={priority}
+      {...(fill ? { fill: true } : { width: width || 400, height: height || 400 })}
+    />
+  );
 };
 
 export default IPFSImage;

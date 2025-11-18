@@ -1,0 +1,19 @@
+# Clarinet
+.cache/
+history.txt
+costs-reports.json
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test outputs
+*.log
+test-results/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db

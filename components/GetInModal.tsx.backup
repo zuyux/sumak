@@ -69,35 +69,16 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
 
       const data = await response.json();
 
-      // Check if account already exists (409 Conflict)
-      if (response.status === 409 && data.requiresLogin) {
-        setIsEmailLoading(false);
-        toast.info('This email already has an account. Please enter your password to log in.');
-        
-        // Store email for login and switch to unlock mode
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('login_email', email);
-        }
-        
-        // Switch to encrypted wallet unlock flow
-        setTimeout(() => {
-          setShowEmailFlow(false);
-          setEncryptedWalletMode('unlock');
-          setShowEncryptedWalletFlow(true);
-        }, 500);
-        return;
-      }
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send verification code');
       }
 
       toast.success('Verification code sent to your email!');
       setEmailStep('verify');
-      setIsEmailLoading(false);
     } catch (error) {
       console.error('Email submission error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to send verification code');
+    } finally {
       setIsEmailLoading(false);
     }
   };
@@ -203,48 +184,16 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
   };
 
 
-  const handleEncryptedWalletSubmit = async (password: string, email?: string) => {
+  const handleEncryptedWalletSubmit = async (password: string) => {
     try {
-      // If email is provided, it's a login attempt
-      if (email && encryptedWalletMode === 'unlock') {
-        const { loginWithEmailAndPassword } = await import('@/lib/emailPasskeyLogin');
-        const result = await loginWithEmailAndPassword(email, password);
-        
-        if (result.success && result.address) {
-          toast.success('¡Inicio de sesión exitoso!');
-          router.push(`/${result.address}`);
-          if (onClose) onClose();
-        } else {
-          const errorMessage = result.error || 'Error al iniciar sesión';
-          if (errorMessage.toLowerCase().includes('password')) {
-            toast.error('Contraseña incorrecta. Por favor, inténtalo de nuevo.');
-          } else if (errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('no wallet')) {
-            toast.error('No se encontró una cuenta con este correo electrónico.');
-          } else {
-            toast.error(errorMessage);
-          }
-          return;
-        }
-      } else {
-        // Only used for unlocking existing wallets
-        await unlockWallet(password);
-        if (walletInfo) {
-          toast.success('¡Billetera desbloqueada!');
-          router.push(`/${walletInfo.address}`);
-          if (onClose) onClose();
-        }
+      // Only used for unlocking existing wallets
+      await unlockWallet(password);
+      if (walletInfo) {
+        router.push(`/${walletInfo.address}`);
+        if (onClose) onClose();
       }
     } catch (error) {
       console.error('Encrypted wallet operation failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Error de autenticación';
-      
-      if (errorMessage.toLowerCase().includes('invalid password') || errorMessage.toLowerCase().includes('password')) {
-        toast.error('Contraseña incorrecta. Verifica tu contraseña e inténtalo de nuevo.');
-      } else if (errorMessage.toLowerCase().includes('not found')) {
-        toast.error('Cuenta no encontrada. Verifica tu correo electrónico.');
-      } else {
-        toast.error('Error al autenticar. Por favor, inténtalo de nuevo.');
-      }
     }
   };
 

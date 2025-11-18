@@ -57,9 +57,11 @@ export default function WalletRecoveryPage() {
 
   // Validate token on component mount
   useEffect(() => {
-    if (!token) {
-      setError('Invalid recovery link');
-      setIsValidating(false);
+    if (!token || mode === 'update') {
+      if (!token && !mode) {
+        setError('Invalid recovery link');
+        setIsValidating(false);
+      }
       return;
     }
 
@@ -69,8 +71,36 @@ export default function WalletRecoveryPage() {
         const data = await response.json();
 
         if (response.ok && data.valid) {
+          // Check if account already exists
+          const email = data.email;
+          const checkResponse = await fetch('/api/profile/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.toLowerCase() })
+          });
+          
+          const checkData = await checkResponse.json();
+          
+          if (checkData.exists) {
+            // Account exists - redirect to login
+            setError('This email already has an account. Please log in with your email and password.');
+            setTokenValid(false);
+            setIsValidating(false);
+            
+            // Store email for login form pre-fill
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('login_email', email);
+            }
+            
+            // Redirect to home with login modal after 2 seconds
+            setTimeout(() => {
+              router.push('/?action=login');
+            }, 2000);
+            return;
+          }
+          
           setTokenValid(true);
-          setEmail(data.email);
+          setEmail(email);
           setExpiresAt(data.expiresAt);
           setStep('create'); // Move to wallet creation step
         } else {
@@ -84,7 +114,7 @@ export default function WalletRecoveryPage() {
     };
 
     validateToken();
-  }, [token]);
+  }, [token, mode, router]);
 
   // Update countdown timer
   useEffect(() => {
@@ -279,19 +309,39 @@ export default function WalletRecoveryPage() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Button 
-                onClick={() => router.push('/signup')}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition-colors"
-              >
-                {isEmailRegistered ? 'Try Different Email' : 'Create New Account'}
-              </Button>
-              <Button 
-                onClick={() => router.push('/')}
-                variant="outline"
-                className="w-full cursor-pointer hover:bg-white hover:text-black transition-colors border-gray-600 text-gray-300 hover:border-white"
-              >
-                Return to Home
-              </Button>
+              {isEmailRegistered ? (
+                <>
+                  <Button 
+                    onClick={() => router.push('/?action=login')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition-colors"
+                  >
+                    Go to Login
+                  </Button>
+                  <Button 
+                    onClick={() => router.push('/signup')}
+                    variant="outline"
+                    className="w-full cursor-pointer hover:bg-white hover:text-black transition-colors border-gray-600 text-gray-300 hover:border-white"
+                  >
+                    Try Different Email
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    onClick={() => router.push('/signup')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition-colors"
+                  >
+                    Create New Account
+                  </Button>
+                  <Button 
+                    onClick={() => router.push('/')}
+                    variant="outline"
+                    className="w-full cursor-pointer hover:bg-white hover:text-black transition-colors border-gray-600 text-gray-300 hover:border-white"
+                  >
+                    Return to Home
+                  </Button>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -1,0 +1,20 @@
+[project]
+name = "sumak-nft-tests"
+description = "SUMAK Audio NFT Testing Suite with Rendezvous"
+authors = ["SUMAK Team"]
+telemetry = false
+cache_dir = ".cache"
+requirements = []
+boot_contracts = []
+
+[contracts.xyz-nft]
+path = "contracts/xyz-nft.clar"
+
+[contracts.commission-mock]
+path = "contracts/commission-mock.clar"
+
+
+
+[repl]
+costs_version = 3
+parser_version = 2

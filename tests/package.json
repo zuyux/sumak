@@ -1,0 +1,27 @@
+{
+  "name": "sumak-nft-tests",
+  "version": "1.0.0",
+  "description": "Rendezvous testing suite for SUMAK Audio NFT contracts",
+  "scripts": {
+    "test": "rv . xyz-nft test",
+    "test:verbose": "rv . xyz-nft test --runs=500",
+    "test:invariant": "rv . xyz-nft invariant",
+    "test:invariant:verbose": "rv . xyz-nft invariant --runs=1000",
+    "test:all": "npm run test && npm run test:invariant",
+    "test:replay": "rv . xyz-nft test --seed=$SEED"
+  },
+  "keywords": [
+    "clarity",
+    "stacks",
+    "nft",
+    "testing",
+    "rendezvous",
+    "property-based-testing",
+    "fuzzing"
+  ],
+  "author": "SUMAK Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@stacks/rendezvous": "^0.12.0"
+  }
+}

@@ -47,6 +47,16 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   } | null>(null);
   const [touched, setTouched] = useState(false);
 
+  // Load email from sessionStorage on mount (for unlock mode)
+  useEffect(() => {
+    if (mode === 'unlock' && typeof window !== 'undefined') {
+      const savedEmail = sessionStorage.getItem('login_email');
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    }
+  }, [mode]);
+
   // Validate password strength in real-time for create/change modes
   useEffect(() => {
     if ((mode === 'create' || mode === 'change') && password && showStrengthIndicator) {
@@ -62,13 +72,13 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
     
     if (!password.trim()) return;
     
-    // Validate email for create mode
-    if (mode === 'create' && !email.trim()) {
-      return; // Email is required for account creation
+    // Validate email for create and unlock modes
+    if ((mode === 'create' || mode === 'unlock') && !email.trim()) {
+      return; // Email is required
     }
     
-    // Validate email format for create mode
-    if (mode === 'create' && email.trim()) {
+    // Validate email format
+    if ((mode === 'create' || mode === 'unlock') && email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return; // Invalid email format
@@ -86,11 +96,13 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
     }
     
     try {
-      await onSubmit(password, mode === 'create' ? email : undefined);
+      await onSubmit(password, (mode === 'create' || mode === 'unlock') ? email : undefined);
       // Clear form on success
       setPassword('');
       setConfirmPassword('');
-      setEmail('');
+      if (mode !== 'unlock') {
+        setEmail('');
+      }
       setTouched(false);
     } catch (error) {
       // Error will be displayed via props
@@ -113,7 +125,7 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   };
 
   const passwordMatch = !confirmRequired || password === confirmPassword;
-  const emailValid = mode !== 'create' || (email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+  const emailValid = (mode !== 'create' && mode !== 'unlock') || (email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
   const isFormValid = password.trim() && 
     emailValid &&
     (!confirmRequired || (confirmPassword && passwordMatch)) &&
@@ -122,8 +134,8 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   return (
     <div className="w-full space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email Input - Only for create mode */}
-        {mode === 'create' && (
+        {/* Email Input - For create and unlock modes */}
+        {(mode === 'create' || mode === 'unlock') && (
           <div className="space-y-2">
             <Label htmlFor="email" className="flex items-center gap-2 text-sm font-medium">
               <AlertCircle className="h-4 w-4" />

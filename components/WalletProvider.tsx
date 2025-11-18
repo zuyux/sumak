@@ -11,15 +11,12 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
 
-  // Persist wallet address for Xverse and Leather
   useEffect(() => {
-    // On mount, restore address if present (only run once on mount)
     const saved = localStorage.getItem('walletAddress');
     if (saved) {
       setAddress(saved);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally empty - only run on mount to restore saved address
+  }, []);
 
   useEffect(() => {
     if (address) {

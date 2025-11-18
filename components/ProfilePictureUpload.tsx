@@ -137,15 +137,16 @@ export function ProfilePictureUpload({
           
           {displayImage ? (
             (currentAvatarCid && !previewUrl) ? (
-              // Use regular img tag for IPFS URLs to avoid Next.js optimization issues
-              <img
+              <Image
                 src={displayImage}
                 alt="Profile"
+                width={96}
+                height={96}
                 className="w-24 h-24 rounded-full object-cover"
+                unoptimized
                 onError={(e) => {
                   console.error('Failed to load IPFS image:', displayImage);
                   e.currentTarget.style.display = 'none';
-                  // Show fallback icon
                   const parent = e.currentTarget.parentElement;
                   if (parent) {
                     const icon = parent.querySelector('.fallback-icon');

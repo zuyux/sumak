@@ -42,6 +42,7 @@ const lacquer = Lacquer({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://sumak.app'),
   title: "SUMAK - SOUNDS & SATS ⚡",
   description: "MINT & EXCHANGE UR SOUNDS",
   icons: {
