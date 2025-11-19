@@ -16,8 +16,21 @@ import { toast } from 'sonner';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { resolveNetwork } from '@/lib/network';
 // import { getProfile } from '@/lib/profileApi';
 // Temporarily removed import: import { getNftsByCreator } from '@/lib/nftApi';
+
+type TokenAttribute = {
+  trait_type: string;
+  value: string | number;
+  display_type?: string;
+};
+
+type TokenLocalization = {
+  uri?: string;
+  default?: string;
+  locales?: string[];
+};
 
 type TokenMetadata = {
   name?: string;
@@ -27,7 +40,7 @@ type TokenMetadata = {
   animation_url?: string;
   audio_url?: string;
   mint?: string;
-  attributes?: Array<{ trait_type: string; value: string | number }>;
+  attributes?: TokenAttribute[];
   properties?: Record<string, unknown>;
   creator?: string;
   royalties?: number;
@@ -51,6 +64,23 @@ type TokenMetadata = {
   token_id?: string | number;
   contract_address?: string;
   contract_name?: string;
+  cached_image?: string;
+  cached_thumbnail_image?: string;
+  cached_media_url?: string;
+  cached_animation_url?: string;
+  cached_audio?: string;
+  media_url?: string;
+  token_uri?: string;
+  localization?: TokenLocalization;
+  [key: string]: unknown;
+};
+
+type DatabaseNFTRecord = {
+  image_cid?: string | null;
+  image_url?: string | null;
+  audio_cid?: string | null;
+  audio_url?: string | null;
+  metadata_cid?: string | null;
   [key: string]: unknown;
 };
 
@@ -71,6 +101,10 @@ export default function NFTDetailPage() {
   const address = params?.address as string;
   const contractName = params?.contractName as string;
   const tokenId = params?.tokenId as string;
+  const configuredNetwork = (process.env.NEXT_PUBLIC_STACKS_NETWORK as 'mainnet' | 'testnet' | 'devnet') || 'testnet';
+  const contractNetwork = resolveNetwork(configuredNetwork, address);
+  const stacksNetworkName = contractNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+  const stacksNetwork = stacksNetworkName === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
 
   // Fetch contract deployer (original creator)
   useEffect(() => {
@@ -127,7 +161,7 @@ export default function NFTDetailPage() {
   const [creatorNfts, setCreatorNfts] = useState<TokenMetadata[]>([]);
 
   // Function to fetch NFT data from database
-  const fetchNFTFromDatabase = useCallback(async () => {
+  const fetchNFTFromDatabase = useCallback(async (): Promise<DatabaseNFTRecord | null> => {
     if (!address || !contractName || !tokenId || !supabaseAdmin) return null;
     try {
       // Use maybeSingle() to avoid 406 error when no rows
@@ -146,7 +180,7 @@ export default function NFTDetailPage() {
         console.warn('Could not fetch NFT from database:', error);
         return null;
       }
-      return data;
+      return data as DatabaseNFTRecord;
     } catch (err) {
       console.error('Error fetching NFT from database:', err);
       return null;
@@ -224,7 +258,7 @@ export default function NFTDetailPage() {
         contract: contractId,
         functionName: 'buy-in-sat',
         functionArgs: functionArgs,
-        network: process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet',
+        network: stacksNetworkName,
         postConditionMode: 'allow' as const,
       };
 
@@ -246,7 +280,7 @@ export default function NFTDetailPage() {
     } finally {
       setIsCollecting(false);
     }
-  }, [currentUserAddress, address, contractName, tokenId, listingPrice, checkIfListed]);
+  }, [currentUserAddress, address, contractName, tokenId, listingPrice, checkIfListed, stacksNetworkName]);
 
   // Check if NFT is listed when component mounts
   useEffect(() => {
@@ -395,6 +429,49 @@ export default function NFTDetailPage() {
     }
   }, [address, contractName, tokenId]);
 
+  const fetchMetadataFromHiro = useCallback(async (): Promise<TokenMetadata | null> => {
+    if (!address || !contractName || !tokenId) return null;
+
+    const baseUrl = stacksNetworkName === 'mainnet' ? 'https://api.hiro.so' : 'https://api.testnet.hiro.so';
+    const principal = `${address}.${contractName}`;
+    const encodedPrincipal = encodeURIComponent(principal);
+    const encodedTokenId = encodeURIComponent(tokenId);
+    const url = `${baseUrl}/metadata/v1/nft/${encodedPrincipal}/${encodedTokenId}`;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const apiKey = process.env.NEXT_PUBLIC_PLATFORM_HIRO_API_KEY;
+
+    if (apiKey) {
+      headers['x-api-key'] = apiKey;
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers,
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        console.warn('Hiro metadata API request failed', response.status);
+        return null;
+      }
+
+      const payload = await response.json();
+      if (!payload?.metadata) {
+        return null;
+      }
+
+      const metadata: TokenMetadata = {
+        ...payload.metadata,
+        token_uri: payload.metadata.token_uri || payload.token_uri,
+      };
+
+      return metadata;
+    } catch (err) {
+      console.error('Failed to fetch metadata from Hiro API:', err);
+      return null;
+    }
+  }, [address, contractName, tokenId, stacksNetworkName]);
+
   useEffect(() => {
     const fetchNFTData = async () => {
       try {
@@ -412,166 +489,151 @@ export default function NFTDetailPage() {
           }
         } catch { /* ignore */ }
 
-        // Try to fetch from API endpoint that queries the contract
-        const contractResponse = await fetch(`/api/nft/${address}/${contractName}`);
-        if (contractResponse.ok) {
-          const contractData = await contractResponse.json();
-          if (contractData.success && contractData.metadataCid) {
-            // Fetch metadata from IPFS using ipfs.io gateway
-            const metadataUrl = `https://ipfs.io/ipfs/${contractData.metadataCid}`;
-            const response = await fetch(metadataUrl);
-            if (response.ok) {
-              const nftData: TokenMetadata = await response.json();
-              setMetadata(nftData);
-              // Set audio URL from audio_url or animation_url field
-              let audioSrc = '';
-              if (nftData.audio_url) {
-                audioSrc = resolveIpfsUrl(nftData.audio_url);
-              } else if (nftData.animation_url) {
-                audioSrc = resolveIpfsUrl(nftData.animation_url);
-              }
-              if (audioSrc) {
-                setAudioUrl(audioSrc);
-              }
-              // Set cover image URL - prioritize database image_cid, then image_url, then metadata image
-              let imageSrc = '';
-              const dbNftData = await fetchNFTFromDatabase();
-              if (dbNftData?.image_cid) {
-                imageSrc = resolveIpfsUrl(dbNftData.image_cid);
-                console.log('Using cover image from database image_cid:', imageSrc);
-              } else if (dbNftData?.image_url) {
-                imageSrc = resolveIpfsUrl(dbNftData.image_url);
-                console.log('Using cover image from database image_url:', imageSrc);
-              } else if (nftData && nftData.image) {
-                imageSrc = resolveIpfsUrl(nftData.image);
-                console.log('Using cover image from metadata fallback:', imageSrc);
-              }
-              if (imageSrc) {
-                setCoverImageUrl(imageSrc);
-              }
-              // If not already cached, fetch and cache the audio file for offline playback
-              if (audioSrc && !audioBlobUrlRef.current) {
-                try {
-                  const audioRes = await fetch(audioSrc);
-                  if (audioRes.ok) {
-                    const arrayBuffer = await audioRes.arrayBuffer();
-                    const uint8Arr = new Uint8Array(arrayBuffer);
-                    // Store as base64 string in localStorage (only for smaller files < 10MB)
-                    if (uint8Arr.length < 10 * 1024 * 1024) {
-                      const b64 = btoa(String.fromCharCode(...uint8Arr));
-                      localStorage.setItem(audioCacheKey, b64);
-                    }
-                    // Create blob URL for immediate use
-                    const blob = new Blob([uint8Arr]);
-                    const blobUrl = URL.createObjectURL(blob);
-                    setAudioBlobUrl(blobUrl);
-                    audioBlobUrlRef.current = blobUrl;
-                  }
-                } catch { 
-                  console.log('Failed to cache audio file, using direct URL');
-                }
+        const dbNftData = await fetchNFTFromDatabase();
+
+        const resolveCandidateUrl = (candidates: Array<string | null | undefined>) => {
+          for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim().length > 0) {
+              const resolved = resolveIpfsUrl(candidate);
+              if (resolved) {
+                return resolved;
               }
             }
           }
-        } else {
-          // Backend 500 error: check if /api/stacks-proxy/extended/v1/contract is running and accessible
-          // Fallback to direct contract query if API fails
-          const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
-          const network = networkEnv === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
+          return '';
+        };
 
-          // Fetch token URI
-          try {
-            const uriCV = await fetchCallReadOnlyFunction({
-              contractAddress: address,
-              contractName,
-              functionName: 'get-token-uri',
-              functionArgs: [uintCV(parseInt(tokenId))],
-              network,
-              senderAddress: address,
-            });
-            const uriJson = cvToJSON(uriCV);
-            let uri = '';
-            if (uriJson.value && uriJson.value.value && typeof uriJson.value.value.value === 'string') {
-              uri = uriJson.value.value.value;
-            } else if (typeof uriJson.value === 'string') {
-              uri = uriJson.value;
-            } else if (typeof uriJson.value?.value === 'string') {
-              uri = uriJson.value.value;
-            }
+        const applyMetadataPayload = async (nftData: TokenMetadata | null) => {
+          if (!nftData) {
+            return false;
+          }
 
-            // Fetch metadata if URI is available
-            if (uri && !uri.startsWith('https')) {
-              let cid = uri;
-              if (cid.startsWith('ipfs://')) {
-                cid = cid.replace('ipfs://', '');
-              }
-              const metadataUrl = `https://ipfs.io/ipfs/${cid}`;
+          setMetadata(nftData);
+
+          const audioSrc = resolveCandidateUrl([
+            dbNftData?.audio_url,
+            dbNftData?.audio_cid,
+            nftData.audio_url,
+            nftData.animation_url,
+            nftData.cached_audio,
+            nftData.cached_media_url,
+            nftData.cached_animation_url,
+            nftData.media_url,
+          ]);
+
+          if (audioSrc) {
+            setAudioUrl(audioSrc);
+            if (!audioBlobUrlRef.current && !audioSrc.startsWith('blob:')) {
               try {
-                const res = await axios.get<TokenMetadata>(metadataUrl, { timeout: 10000 });
-                setMetadata(res.data);
-
-                // Set audio URL from audio_url or animation_url field
-                let audioSrc = '';
-                if (res.data.audio_url) {
-                  audioSrc = resolveIpfsUrl(res.data.audio_url);
-                } else if (res.data.animation_url) {
-                  audioSrc = resolveIpfsUrl(res.data.animation_url);
-                }
-                
-                // Convert IPFS URLs to use ipfs.io gateway
-                if (audioSrc) {
-                  setAudioUrl(audioSrc);
-                }
-
-                // Set cover image URL
-                let imageSrc = '';
-                if (res.data.image) {
-                  imageSrc = resolveIpfsUrl(res.data.image);
-                  setCoverImageUrl(imageSrc);
-                }
-
-                // Cache audio file if available and not too large
-                if (audioSrc && !audioBlobUrlRef.current) {
-                  try {
-                    const audioRes = await fetch(audioSrc);
-                    if (audioRes.ok) {
-                      const arrayBuffer = await audioRes.arrayBuffer();
-                      const uint8Arr = new Uint8Array(arrayBuffer);
-                      if (uint8Arr.length < 10 * 1024 * 1024) {
-                        const b64 = btoa(String.fromCharCode(...uint8Arr));
-                        localStorage.setItem(audioCacheKey, b64);
-                      }
-                      const blob = new Blob([uint8Arr]);
-                      const blobUrl = URL.createObjectURL(blob);
-                      setAudioBlobUrl(blobUrl);
-                      audioBlobUrlRef.current = blobUrl;
-                    }
-                  } catch { 
-                    console.log('Failed to cache audio file');
+                const audioRes = await fetch(audioSrc);
+                if (audioRes.ok) {
+                  const arrayBuffer = await audioRes.arrayBuffer();
+                  const uint8Arr = new Uint8Array(arrayBuffer);
+                  if (uint8Arr.length < 10 * 1024 * 1024) {
+                    const b64 = btoa(String.fromCharCode(...uint8Arr));
+                    localStorage.setItem(audioCacheKey, b64);
                   }
+                  const blob = new Blob([uint8Arr]);
+                  const blobUrl = URL.createObjectURL(blob);
+                  setAudioBlobUrl(blobUrl);
+                  audioBlobUrlRef.current = blobUrl;
                 }
-              } catch (err) {
-                console.log('Error fetching metadata:', err);
-                setError('Failed to load NFT metadata');
+              } catch {
+                console.log('Failed to cache audio file, using direct URL');
               }
             }
-          } catch (err) {
-            console.log('Error fetching token URI:', err);
-            setError('Failed to load NFT data');
+          }
+
+          const imageSrc = resolveCandidateUrl([
+            dbNftData?.image_cid,
+            dbNftData?.image_url,
+            nftData.cached_image,
+            nftData.cached_thumbnail_image,
+            nftData.image,
+          ]);
+
+          if (imageSrc) {
+            setCoverImageUrl(imageSrc);
+          }
+
+          return true;
+        };
+
+        let metadataLoaded = false;
+        const hiroMetadata = await fetchMetadataFromHiro();
+        if (hiroMetadata) {
+          metadataLoaded = await applyMetadataPayload(hiroMetadata);
+          if (metadataLoaded) {
+            console.log('Loaded metadata via Hiro Token Metadata API');
+          }
+        }
+
+        if (!metadataLoaded) {
+          const contractResponse = await fetch(`/api/nft/${address}/${contractName}`);
+          if (contractResponse.ok) {
+            const contractData = await contractResponse.json();
+            if (contractData.success && contractData.metadataCid) {
+              const metadataUrl = `https://ipfs.io/ipfs/${contractData.metadataCid}`;
+              const response = await fetch(metadataUrl);
+              if (response.ok) {
+                const nftData: TokenMetadata = await response.json();
+                metadataLoaded = await applyMetadataPayload(nftData);
+              }
+            }
+          }
+
+          if (!metadataLoaded) {
+            try {
+              const uriCV = await fetchCallReadOnlyFunction({
+                contractAddress: address,
+                contractName,
+                functionName: 'get-token-uri',
+                functionArgs: [uintCV(parseInt(tokenId))],
+                network: stacksNetwork,
+                senderAddress: address,
+              });
+              const uriJson = cvToJSON(uriCV);
+              let uri = '';
+              if (uriJson.value && uriJson.value.value && typeof uriJson.value.value.value === 'string') {
+                uri = uriJson.value.value.value;
+              } else if (typeof uriJson.value === 'string') {
+                uri = uriJson.value;
+              } else if (typeof uriJson.value?.value === 'string') {
+                uri = uriJson.value.value;
+              }
+
+              if (uri) {
+                let metadataUrl = uri;
+                if (metadataUrl.startsWith('ipfs://')) {
+                  metadataUrl = metadataUrl.replace('ipfs://', '');
+                }
+                if (!metadataUrl.startsWith('https://') && !metadataUrl.startsWith('http://')) {
+                  metadataUrl = `https://ipfs.io/ipfs/${metadataUrl}`;
+                }
+
+                try {
+                  const res = await axios.get<TokenMetadata>(metadataUrl, { timeout: 10000 });
+                  metadataLoaded = await applyMetadataPayload(res.data);
+                } catch (err) {
+                  console.log('Error fetching metadata:', err);
+                  setError('Failed to load NFT metadata');
+                }
+              }
+            } catch (err) {
+              console.log('Error fetching token URI:', err);
+              setError('Failed to load NFT data');
+            }
           }
         }
 
         // Fetch owner separately
         try {
-          const networkEnv = process.env.NEXT_PUBLIC_STACKS_NETWORK || "testnet";
-          const network = networkEnv === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
-
           const ownerCV = await fetchCallReadOnlyFunction({
             contractAddress: address,
             contractName,
             functionName: 'get-owner',
             functionArgs: [uintCV(parseInt(tokenId))],
-            network,
+            network: stacksNetwork,
             senderAddress: address,
           });
           const ownerJson = cvToJSON(ownerCV);
@@ -608,7 +670,7 @@ export default function NFTDetailPage() {
     if (address && contractName && tokenId) {
       initializeData();
     }
-  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, currentUserAddress, fetchNFTFromDatabase]);
+  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, fetchNFTFromDatabase, fetchMetadataFromHiro, stacksNetwork, stacksNetworkName]);
 
   useEffect(() => {
     const fetchCreatorData = async () => {
@@ -1004,7 +1066,7 @@ export default function NFTDetailPage() {
                                 {contractTxData && (
                                   <div className="mt-3 flex items-center gap-2">
                                     <a
-                                      href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet'}`}
+                                      href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${stacksNetworkName}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
@@ -1091,7 +1153,7 @@ export default function NFTDetailPage() {
                                 </div>
                                 <div className="mt-3 flex items-center gap-2">
                                   <a
-                                    href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${process.env.NEXT_PUBLIC_STACKS_NETWORK || 'testnet'}`}
+                                    href={`https://explorer.hiro.so/txid/${contractTxData.tx_id}?chain=${stacksNetworkName}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
@@ -1196,7 +1258,7 @@ export default function NFTDetailPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div>
-                          <div className="text-xs text-muted-foreground">Creator</div>
+                          <div className="text-xs text-muted-foreground">Publisher</div>
                           <div className="text-sm font-medium flex items-center gap-2">
                             {(deployerAddress || address) ? (
                               <>

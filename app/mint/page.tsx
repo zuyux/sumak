@@ -16,7 +16,7 @@ import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 import { request } from '@stacks/connect';
 import { validateAndGenerateWallet } from '@/lib/walletHelpers';
 import { getApiUrl } from '@/lib/stacks-api';
-import { getPersistedNetwork } from '@/lib/network';
+import { getPersistedNetwork, resolveNetwork } from '@/lib/network';
 import { getSBTCContract } from '@/lib/contracts';
 
 // Utility to detect wallet type
@@ -292,7 +292,8 @@ export default function MintPage() {
     const checkBalance = async () => {
       setCheckingBalance(true);
       try {
-        const currentNetwork = getPersistedNetwork();
+        const persistedNetwork = getPersistedNetwork();
+        const currentNetwork = resolveNetwork(persistedNetwork, effectiveAddress);
         const baseUrl = getApiUrl(currentNetwork);
         
         const response = await fetch(`${baseUrl}/extended/v1/address/${effectiveAddress}/balances`);
@@ -307,7 +308,7 @@ export default function MintPage() {
           console.log('Mint Page - Available token keys:', Object.keys(data.fungible_tokens || {}));
           
           // The network-aware sBTC token identifier
-          const sbtcTokenKey = getSBTCContract();
+          const sbtcTokenKey = getSBTCContract(currentNetwork);
           
           if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
             const balance = data.fungible_tokens[sbtcTokenKey].balance;

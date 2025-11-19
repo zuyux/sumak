@@ -280,7 +280,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     </div>
                     {w.installed ? (
                       <Button
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer"
+                        className="bg-black hover:bg-[#333] text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer"
                         onClick={async () => {
                           console.log('Connect button clicked:', w);
                           try {

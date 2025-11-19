@@ -1,4 +1,4 @@
-import { getPersistedNetwork } from './network';
+import { getPersistedNetwork, Network } from './network';
 
 // Contract addresses for different networks
 const CONTRACTS = {
@@ -13,12 +13,12 @@ const CONTRACTS = {
   },
 };
 
-export function getSBTCContract(): string {
-  const network = getPersistedNetwork();
+export function getSBTCContract(networkOverride?: Network): string {
+  const network = networkOverride || getPersistedNetwork();
   return CONTRACTS[network]?.SBTC_TOKEN || CONTRACTS.testnet.SBTC_TOKEN;
 }
 
-export function getNetworkContracts() {
-  const network = getPersistedNetwork();
+export function getNetworkContracts(networkOverride?: Network) {
+  const network = networkOverride || getPersistedNetwork();
   return CONTRACTS[network] || CONTRACTS.testnet;
 }

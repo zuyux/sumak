@@ -6,7 +6,7 @@ import { useWallet } from './WalletProvider';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import { LoaderCircle } from "lucide-react";
-import { getPersistedNetwork } from '@/lib/network';
+import { getPersistedNetwork, resolveNetwork } from '@/lib/network';
 import { getApiUrl } from '@/lib/stacks-api';
 import { getProfile, Profile } from '@/lib/profileApi';
 import { getIPFSUrl } from '@/lib/pinataUpload';
@@ -46,7 +46,8 @@ export default function UserModal({ onClose }: UserModalProps) {
       return;
     }
     
-    const network = getPersistedNetwork();
+    const persistedNetwork = getPersistedNetwork();
+    const network = resolveNetwork(persistedNetwork, currentAddress);
     const baseApiUrl = getApiUrl(network);
     const apiUrl = `${baseApiUrl}/extended/v1/address/${currentAddress}/balances?unanchored=false`;
     
@@ -64,7 +65,7 @@ export default function UserModal({ onClose }: UserModalProps) {
         console.log('UserModal - Available token keys:', Object.keys(data.fungible_tokens || {}));
         
         // The network-aware sBTC token identifier
-        const sbtcTokenKey = getSBTCContract();
+        const sbtcTokenKey = getSBTCContract(network);
         
         if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
           const balance = data.fungible_tokens[sbtcTokenKey].balance;

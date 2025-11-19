@@ -54,6 +54,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
   const { setCurrentAlbum } = useMusicPlayer();
   const inputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const latestQueryRef = useRef('');
   const [activeTab, setActiveTab] = useState<TabType>('tracks');
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -288,31 +289,44 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onClose }) => {
   };
 
   useEffect(() => {
-    if (open && inputRef.current) {
+    latestQueryRef.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (inputRef.current) {
       inputRef.current.focus();
     }
-    
+
+    performSearch(latestQueryRef.current || '');
+  }, [open, performSearch]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    
+
     const handleClickOutside = (e: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
-    
-    if (open) {
-      window.addEventListener('keydown', handleEsc);
-      window.addEventListener('mousedown', handleClickOutside);
-      performSearch(''); // Load initial data
-    }
-    
+
+    window.addEventListener('keydown', handleEsc);
+    window.addEventListener('mousedown', handleClickOutside);
+
     return () => {
       window.removeEventListener('keydown', handleEsc);
       window.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [open, onClose, activeTab, performSearch]);
+  }, [open, onClose]);
 
   if (!open) return null;
 

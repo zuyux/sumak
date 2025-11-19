@@ -93,9 +93,11 @@ export default function UniversalImage({
       fallbackUrls.current = [optimizedUrl, ...generateFallbackUrls(src)];
       setCurrentSrc(fallbackUrls.current[0]);
       
-      console.log('Device-optimized image URL:', optimizedUrl);
-      console.log('Device info:', deviceInfo);
-      console.log('Loading strategy:', strategy);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Device-optimized image URL:', optimizedUrl);
+        console.log('Device info:', deviceInfo);
+        console.log('Loading strategy:', strategy);
+      }
     } else {
       // Fallback for SSR
       fallbackUrls.current = generateFallbackUrls(src);
@@ -115,12 +117,16 @@ export default function UniversalImage({
       setImageError(false);
       setIsLoading(true);
       
-      console.log(`Trying fallback URL ${nextIndex + 1}/${fallbackUrls.current.length}:`, fallbackUrls.current[nextIndex]);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Trying fallback URL ${nextIndex + 1}/${fallbackUrls.current.length}:`, fallbackUrls.current[nextIndex]);
+      }
     } else {
       // All fallbacks failed
       setImageError(true);
       setIsLoading(false);
-      console.error('All image fallback URLs failed for:', src);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('All image fallback URLs failed for:', src);
+      }
     }
   };
 
@@ -137,7 +143,9 @@ export default function UniversalImage({
   };
 
   const handleError = () => {
-    console.warn(`Image failed to load: ${currentSrc}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`Image failed to load: ${currentSrc}`);
+    }
     onError?.();
     
     // Try next fallback immediately for faster error recovery
@@ -189,6 +197,8 @@ export default function UniversalImage({
     );
   }
 
+  const shouldBypassOptimization = currentSrc.includes('/ipfs/') || currentSrc.startsWith('ipfs://');
+
   return (
     <Image 
       src={currentSrc}
@@ -199,7 +209,7 @@ export default function UniversalImage({
       quality={quality}
       priority={priority}
       sizes={sizes}
-      unoptimized={false}
+      unoptimized={shouldBypassOptimization}
       placeholder="blur"
       blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
       {...(fill ? { fill: true } : { width, height })}

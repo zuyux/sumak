@@ -13,7 +13,7 @@ declare global {
 import { getSigningNetwork } from "@/lib/encryptedWalletSigning";
 import { makeSTXTokenTransfer, broadcastTransaction } from "@stacks/transactions";
 import { getApiUrl } from "@/lib/stacks-api";
-import { getPersistedNetwork } from "@/lib/network";
+import { getPersistedNetwork, resolveNetwork } from "@/lib/network";
 import { getSBTCContract } from "@/lib/contracts";
 
 import { Copy, X, LoaderCircle, Wallet } from "lucide-react";
@@ -24,6 +24,8 @@ import { fetchRecentTransactions } from "@/lib/fetchRecentTransactions";
 
 export default function WalletPage() {
   const address = useCurrentAddress() || "";
+  const persistedNetwork = getPersistedNetwork();
+  const effectiveNetwork = resolveNetwork(persistedNetwork, address);
   const [sbtcBalance, setSbtcBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,13 +57,12 @@ export default function WalletPage() {
     setLoading(true);
     
     // Get current network and use appropriate API endpoint
-    const currentNetwork = getPersistedNetwork();
-    const apiBaseUrl = getApiUrl(currentNetwork);
+    const apiBaseUrl = getApiUrl(effectiveNetwork);
     
     // Fetch SBTC token balance from the fungible token contract
     const apiUrl = `${apiBaseUrl}/extended/v1/address/${address}/balances?unanchored=false`;
     
-    console.log(`Fetching SBTC balance from ${currentNetwork} network:`, apiUrl);
+    console.log(`Fetching SBTC balance from ${effectiveNetwork} network:`, apiUrl);
     
     fetch(apiUrl)
       .then(res => res.json())
@@ -74,7 +75,7 @@ export default function WalletPage() {
         console.log('Available token keys:', Object.keys(data.fungible_tokens || {}));
         
         // The network-aware sBTC token identifier
-        const sbtcTokenKey = getSBTCContract();
+        const sbtcTokenKey = getSBTCContract(effectiveNetwork);
         
         if (data.fungible_tokens && data.fungible_tokens[sbtcTokenKey]) {
           const balance = data.fungible_tokens[sbtcTokenKey].balance;
@@ -109,7 +110,7 @@ export default function WalletPage() {
         setSbtcBalance('--');
         setLoading(false);
       });
-  }, [address]);
+  }, [address, effectiveNetwork]);
 
   // Send handler
   const handleSend = async (e: React.FormEvent) => {
@@ -260,12 +261,11 @@ export default function WalletPage() {
       return;
     }
     setTxLoading(true);
-    const network = getPersistedNetwork();
-    fetchRecentTransactions(address, network, 10)
+    fetchRecentTransactions(address, effectiveNetwork, 10)
       .then(setTransactions)
       .catch(() => setTransactions([]))
       .finally(() => setTxLoading(false));
-  }, [address, showSend]);
+  }, [address, showSend, effectiveNetwork]);
 
 
   // If no wallet address, ask to connect wallet
@@ -307,11 +307,11 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* Network and Address Info - Only show if not mainnet */}
-      {getPersistedNetwork() !== 'mainnet' && (
+      {/* Network and Address Info - Only show if effective network is not mainnet */}
+      {effectiveNetwork !== 'mainnet' && (
         <div className="mb-16 p-4 bg-muted rounded-lg">
           <div className="flex items-center justify-center text-sm">
-            <span className="text-primary text-center uppercase">{getPersistedNetwork()}</span>
+            <span className="text-primary text-center uppercase">{effectiveNetwork}</span>
           </div>
         </div>
       )}
@@ -472,7 +472,7 @@ export default function WalletPage() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="font-mono text-xs text-muted-foreground break-all">
-                        <a href={`https://explorer.hiro.so/txid/${tx.tx_id}?chain=${getPersistedNetwork()}`}
+                        <a href={`https://explorer.hiro.so/txid/${tx.tx_id}?chain=${effectiveNetwork}`}
                           target="_blank" rel="noopener noreferrer"
                           className="hover:underline text-primary">
                           {tx.tx_id.slice(0, 10)}...{tx.tx_id.slice(-8)}
