@@ -1,8 +1,7 @@
 ;; Mock commission contract for testing marketplace functionality
 ;; Implements the commission-trait required by xyz-nft
 
-(define-trait commission-trait
-  ((pay (uint uint) (response bool uint))))
+(impl-trait .xyz-nft.commission-trait)
 
 ;; Track commission payments for testing
 (define-data-var total-commissions-paid uint u0)
