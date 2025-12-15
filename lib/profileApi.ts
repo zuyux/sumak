@@ -3,8 +3,7 @@ import { supabase } from '@/lib/supabaseClient';
 // Test Supabase connectivity
 export async function testSupabaseConnection() {
   try {
-    console.log('Testing Supabase connection...');
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('profiles')
       .select('count', { count: 'exact', head: true });
     
@@ -13,7 +12,6 @@ export async function testSupabaseConnection() {
       return false;
     }
     
-    console.log('Supabase connection test successful, count result:', data);
     return true;
   } catch (error) {
     console.error('Supabase connection test error:', error);
@@ -93,8 +91,6 @@ export interface Profile {
 
 export async function getProfile(address: string): Promise<Profile | null> {
   try {
-    console.log(`Attempting to fetch profile for address: ${address}`);
-    
     // Use case-insensitive search to find profiles regardless of address case
     const { data, error } = await supabase
       .from('profiles')
@@ -105,7 +101,6 @@ export async function getProfile(address: string): Promise<Profile | null> {
     if (error) {
       if (error.code === 'PGRST116') {
         // No profile found - this is normal for new users
-        console.log(`No profile found for address: ${address}`);
         return null;
       }
       if (error.code === '42P01') {
@@ -124,7 +119,6 @@ export async function getProfile(address: string): Promise<Profile | null> {
       throw error;
     }
     
-    console.log(`Profile loaded successfully for address: ${address}`);
     return data;
   } catch (error) {
     console.error('Complete error in getProfile:', {
@@ -140,7 +134,6 @@ export async function getProfile(address: string): Promise<Profile | null> {
     });
     
     // Test connection if we get an unexpected error
-    console.log('Running Supabase connection test...');
     await testSupabaseConnection();
     
     // Return null instead of throwing to prevent page crashes
@@ -150,27 +143,12 @@ export async function getProfile(address: string): Promise<Profile | null> {
 
 export async function upsertProfile(profile: Partial<Profile> & { address: string }): Promise<Profile> {
   try {
-    // Normalize address for searching only - keep original address for storage
-    const normalizedAddress = profile.address.toLowerCase();
-    
     // Update last_active timestamp but keep the original address
     const profileData = {
       ...profile,
       // DO NOT overwrite the address - keep the original case
       last_active: new Date().toISOString()
     };
-
-    console.log('Upserting profile:', { 
-      originalAddress: profile.address,
-      searchAddress: normalizedAddress,
-      fields: Object.keys(profileData),
-      dataPreview: {
-        address: profileData.address,
-        username: profileData.username,
-        email: profileData.email,
-        display_name: profileData.display_name
-      }
-    });
 
     // First, try to find existing profile with case-insensitive search
     const { data: existingProfiles } = await supabase
@@ -197,7 +175,7 @@ export async function upsertProfile(profile: Partial<Profile> & { address: strin
       
       data = updateResult.data;
       error = updateResult.error;
-      console.log('Updated existing profile:', existingProfile.id, 'preserved address:', existingProfile.address);
+      
     } else {
       // No existing profile found, create new one with original address case
       const insertResult = await supabase
@@ -213,7 +191,7 @@ export async function upsertProfile(profile: Partial<Profile> & { address: strin
       
       data = insertResult.data;
       error = insertResult.error;
-      console.log('Created new profile with original address:', profile.address);
+      
     }
     
     if (error) {
@@ -227,7 +205,6 @@ export async function upsertProfile(profile: Partial<Profile> & { address: strin
       throw new Error(`Database error: ${error.message || error.code || 'Unknown error'}`);
     }
     
-    console.log('Profile upserted successfully:', data.id);
     return data;
   } catch (error) {
     console.error('Error upserting profile:', {

@@ -107,10 +107,44 @@ interface MusicPlayerContextType {
 
 const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 
+const IPFS_GATEWAY_FALLBACKS = [
+  'https://ipfs.io/ipfs/',
+  'https://gateway.pinata.cloud/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://w3s.link/ipfs/',
+  'https://nftstorage.link/ipfs/',
+  'https://dweb.link/ipfs/'
+];
+
+const extractIpfsHash = (rawUrl: string): string | null => {
+  if (!rawUrl) return null;
+  const trimmed = rawUrl.trim();
+
+  if (/^[a-zA-Z0-9]{46,}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const pathMatch = trimmed.match(/(?:ipfs:\/\/|\/ipfs\/)([^/?#]+)/i);
+  if (pathMatch && pathMatch[1]) {
+    return pathMatch[1];
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const subdomainMatch = parsed.hostname.match(/^([a-z0-9]+)\.ipfs\./i);
+    if (subdomainMatch && subdomainMatch[1]) {
+      return subdomainMatch[1];
+    }
+  } catch {
+    // Ignore invalid URLs
+  }
+
+  return null;
+};
+
 // Function to fetch NFT music data from Supabase
 const fetchNFTMusicData = async (): Promise<Album[]> => {
   try {
-    console.log('Fetching NFT music data from Supabase...');
     const { data: nfts, error } = await supabase
       .from('nfts')
       .select('*')
@@ -125,10 +159,7 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
       return getFallbackAlbums();
     }
 
-    console.log(`Found ${nfts?.length || 0} NFTs with audio`);
-
     if (!nfts || nfts.length === 0) {
-      console.log('No NFTs found, using fallback albums');
       return getFallbackAlbums();
     }
 
@@ -175,7 +206,6 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
       };
     });
 
-    console.log(`Successfully converted ${albums.length} NFTs to albums`);
     return albums;
   } catch (error) {
     console.error('Error in fetchNFTMusicData:', error);
@@ -232,7 +262,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     if (url.startsWith('https://')) return url;
     // If it's a CID (46+ chars, alphanumeric), build the ipfs.io URL
     if (/^[a-zA-Z0-9]{46,}$/.test(url)) {
-      console.log(`No IPFS pattern found in URL: ${url}`);
       return `https://ipfs.io/ipfs/${url}`;
     }
     // Match IPFS CID patterns in URLs
@@ -246,7 +275,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       if (match && match[1]) {
         const cid = match[1];
         const finalUrl = `https://ipfs.io/ipfs/${cid}`;
-        console.log(`Converting IPFS URL: ${url} -> ${finalUrl}`);
         return finalUrl;
       }
     }
@@ -285,73 +313,78 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   // This helps when a gateway is unavailable or returns an unsupported response.
   const generateAudioCandidates = useCallback((rawUrl: string): string[] => {
     if (!rawUrl) return [];
-    // Normalize to ipfs.io when possible
-    const canonical = convertToIpfsIo(rawUrl);
-    const candidates: string[] = [];
 
-    // If canonical contains an IPFS hash, only use ipfs.io gateway
-    const ipfsMatch = canonical.match(/\/ipfs\/(.+)$/);
-    if (ipfsMatch && ipfsMatch[1]) {
-      const hash = ipfsMatch[1];
-      // Only use ipfs.io gateway - simple and reliable
-      const direct = `https://ipfs.io/ipfs/${hash}`;
-      candidates.push(direct);
-      
-      // Also try proxied version as fallback
-      const prox = maybeProxy(direct);
-      if (prox !== direct) candidates.push(prox);
-      
-      return Array.from(new Set(candidates));
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    const push = (candidate: string | null) => {
+      if (!candidate) return;
+      if (seen.has(candidate)) return;
+      seen.add(candidate);
+      ordered.push(candidate);
+    };
+    const pushWithProxy = (candidate: string | null) => {
+      if (!candidate) return;
+      push(candidate);
+      const prox = maybeProxy(candidate);
+      if (prox !== candidate) {
+        push(prox);
+      }
+    };
+
+    const trimmed = rawUrl.trim();
+    const canonical = convertToIpfsIo(trimmed);
+    const ipfsHash = extractIpfsHash(trimmed);
+
+    // Always try the original URL first
+    pushWithProxy(trimmed);
+
+    if (ipfsHash) {
+      for (const gateway of IPFS_GATEWAY_FALLBACKS) {
+        pushWithProxy(`${gateway}${ipfsHash}`);
+      }
+    } else if (canonical !== trimmed) {
+      // Non-IPFS URLs might still benefit from canonicalization
+      pushWithProxy(canonical);
     }
 
-    // Not an IPFS path: prefer direct then proxied
-    candidates.push(canonical);
-    const prox = maybeProxy(canonical);
-    if (prox !== canonical) candidates.push(prox);
-    return Array.from(new Set(candidates));
+    return ordered;
   }, [convertToIpfsIo, maybeProxy]);
 
   // Load metadata for a specific album
   const loadMetadata = useCallback(async (album: Album): Promise<NFTMetadata | null> => {
-    // Only use ipfs.io gateway - simple and reliable
-    const ipfsGateways = [
-      'https://ipfs.io/ipfs/',
-    ];
+    const targets: string[] = [];
+    const ipfsHash = extractIpfsHash(album.metadataUrl);
 
-    // Extract IPFS hash from the URL
-    const getIpfsHash = (url: string): string => {
-      const match = url.match(/\/ipfs\/(.+)$/);
-      return match ? match[1] : url;
-    };
+    if (ipfsHash) {
+      for (const gateway of IPFS_GATEWAY_FALLBACKS) {
+        targets.push(`${gateway}${ipfsHash}`);
+      }
+    }
 
-    const ipfsHash = getIpfsHash(album.metadataUrl);
+    // Always try canonical + original metadata URLs as well
+    targets.push(convertToIpfsIo(album.metadataUrl));
+    targets.push(album.metadataUrl);
 
-    for (const gateway of ipfsGateways) {
+    for (const url of Array.from(new Set(targets))) {
+      if (!url) continue;
       try {
-        const url = `${gateway}${ipfsHash}`;
-        console.log(`Trying to fetch metadata from: ${url}`);
-        
         const response = await fetch(url, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          // Add timeout to prevent hanging requests
           signal: AbortSignal.timeout(10000)
         });
         
         if (!response.ok) {
-          console.warn(`Failed to fetch from ${gateway}: ${response.status} ${response.statusText}`);
+          console.warn(`Failed to fetch metadata from ${url}: ${response.status} ${response.statusText}`);
           continue;
         }
         
         const metadata: NFTMetadata = await response.json();
-        console.log(`Successfully loaded metadata from: ${gateway}`);
         
-        // Convert any IPFS gateway URLs in the metadata to ipfs.io
         if (metadata.image) {
           const convertedImage = convertToIpfsIo(metadata.image);
-          // Validate that the converted URL is not empty
           metadata.image = convertedImage || '/SUMAK.png';
         } else {
           metadata.image = '/SUMAK.png';
@@ -366,12 +399,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         
         return metadata;
       } catch (error) {
-        console.warn(`Error fetching from ${gateway}:`, error);
+        console.warn(`Error fetching metadata from ${url}:`, error);
         continue;
       }
     }
 
-    console.error('Failed to load metadata from ipfs.io gateway');
+    console.error('Failed to load metadata from available IPFS gateways');
     return null;
   }, [convertToIpfsIo]);
 
@@ -387,16 +420,13 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   };
 
   const loadAllMetadata = useCallback(async () => {
-    console.log('Loading all metadata...');
     setIsLoading(true);
     try {
       // First, fetch NFT data from Supabase
       const nftAlbums = await fetchNFTMusicData();
-      console.log(`Fetched ${nftAlbums.length} albums from NFT data`);
       
       // If we have NFT albums with existing metadata, use them directly
       if (nftAlbums.length > 0 && nftAlbums.some(album => album.metadata)) {
-        console.log('Using NFT albums with existing metadata');
         setAlbumsWithMetadata(nftAlbums);
         
           // Set current album to a random album with metadata
@@ -405,7 +435,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
             const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
             const randomAlbum = albumsWithMeta[randomIndex];
             if (randomAlbum.metadata) {
-              console.log(`Setting current album to: ${randomAlbum.metadata.name}`);
               setCurrentAlbumState(randomAlbum);
               setDuration(randomAlbum.metadata.properties.duration);
             }
@@ -414,7 +443,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
       
       // Fallback: load metadata from IPFS if needed
-      console.log('Loading metadata from IPFS for albums without existing metadata');
       const albumsWithLoadedMetadata = await Promise.all(
         nftAlbums.map(async (album: Album) => {
           // If album already has metadata from NFT record, use it
@@ -436,7 +464,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
           const randomAlbum = albumsWithMeta[randomIndex];
           if (randomAlbum.metadata) {
-            console.log(`Setting current album to: ${randomAlbum.metadata.name}`);
             setCurrentAlbumState(randomAlbum);
             setDuration(randomAlbum.metadata.properties.duration);
           }
@@ -444,7 +471,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error loading music data:', error);
       // On error, try to load fallback albums
-      console.log('Using fallback albums due to error');
       const fallbackAlbums = getFallbackAlbums();
       const albumsWithLoadedMetadata = await Promise.all(
         fallbackAlbums.map(async (album: Album) => {
@@ -459,14 +485,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           const randomIndex = Math.floor(Math.random() * albumsWithMeta.length);
           const randomAlbum = albumsWithMeta[randomIndex];
           if (randomAlbum.metadata) {
-            console.log(`Setting fallback current album to: ${randomAlbum.metadata.name}`);
             setCurrentAlbumState(randomAlbum);
             setDuration(randomAlbum.metadata.properties.duration);
           }
         }
     } finally {
       setIsLoading(false);
-      console.log('Finished loading metadata');
     }
   }, [loadMetadata]);
   // Load metadata on component mount
@@ -541,11 +565,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   // Update volume when volume state changes
   useEffect(() => {
-    console.log('Volume effect triggered:', { volume, audioElement: !!audioRef.current });
     if (audioRef.current) {
-      console.log('Setting audio volume in effect to:', volume);
       audioRef.current.volume = volume;
-      console.log('Audio volume after effect:', audioRef.current.volume);
     }
   }, [volume]);
 
@@ -697,8 +718,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   }, [albumsWithMetadata, currentAlbum, isPlaying, isShuffled, setCurrentAlbum, safePlay]);
 
   const setVolume = useCallback((newVolume: number) => {
-    console.log('setVolume called:', { newVolume, currentVolume: volume });
-    
     // Ensure volume is between 0 and 1
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
     
@@ -708,14 +727,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     // Always update the audio element volume
     if (audioRef.current) {
       try {
-        console.log('Setting audio element volume to:', clampedVolume);
         audioRef.current.volume = clampedVolume;
-        console.log('Audio element volume after setting:', audioRef.current.volume);
       } catch (error) {
         console.error('Error setting audio volume:', error);
       }
     }
-  }, [volume]);
+  }, []);
 
   const seekTo = useCallback((time: number) => {
     setCurrentTime(time);

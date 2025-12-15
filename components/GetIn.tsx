@@ -57,19 +57,6 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
           const session = localStorage.getItem('sumak_session');
           const hasSession = !!session;
           
-          // Enhanced debugging
-          if (hasSession && session) {
-            const parsed = JSON.parse(session);
-            console.log('✅ Session found:', {
-              hasSession,
-              address: parsed.address,
-              encrypted: parsed.encrypted,
-              timestamp: new Date(parsed.createdAt).toLocaleString()
-            });
-          } else {
-            console.log('❌ No session found in localStorage');
-          }
-          
           setIsSessionLoggedIn(hasSession);
         } catch (error) {
           console.error('⚠️ Error checking session:', error);
@@ -85,14 +72,12 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
 
       // Also listen for route changes to update session state after navigation
       const handleVisibility = () => {
-        console.log('👁️ Visibility changed, rechecking session');
         checkSession();
       };
       window.addEventListener('visibilitychange', handleVisibility);
 
       // Listen for custom event after login
       const handleSessionUpdate = () => {
-        console.log('🔔 Received sumak-session-update event, rechecking session');
         checkSession();
       };
       window.addEventListener('sumak-session-update', handleSessionUpdate);
@@ -142,7 +127,6 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   // Just show fallback icon on error
-                  console.log('IPFS image failed to load, showing fallback icon');
                   e.currentTarget.style.display = 'none';
                   const parent = e.currentTarget.parentElement;
                   if (parent) {

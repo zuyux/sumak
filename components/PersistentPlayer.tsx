@@ -45,15 +45,13 @@ export default function PersistentPlayer() {
   }, [currentAlbum?.metadata?.image]);
 
   const handleImageError = () => {
-  console.log('PersistentPlayer image failed to load, using fallback');
-  setImageError(true);
-  setImageLoading(false);
+    setImageError(true);
+    setImageLoading(false);
   };
 
   const handleImageLoad = () => {
-  console.log('PersistentPlayer image loaded successfully');
-  setImageError(false);
-  setImageLoading(false);
+    setImageError(false);
+    setImageLoading(false);
   };
   
   const openImageModal = useCallback((e?: React.SyntheticEvent) => {
@@ -97,17 +95,6 @@ export default function PersistentPlayer() {
     setLocalVolume(volume);
   }, [volume]);
 
-  // Log background image changes for debugging
-  useEffect(() => {
-    if (currentAlbum?.metadata?.image) {
-      console.log('Background image updated for track:', {
-        title: getTitle(currentAlbum.metadata),
-        artist: getArtist(currentAlbum.metadata),
-        image: currentAlbum.metadata.image
-      });
-    }
-  }, [currentAlbum?.metadata?.image, currentAlbum?.metadata, getTitle, getArtist]);
-
   // Format time from seconds to mm:ss
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -118,7 +105,6 @@ export default function PersistentPlayer() {
   // Enhanced track navigation with background update feedback
   const handleNextTrack = useCallback(() => {
     setIsTransitioning(true);
-    console.log('🎵 Navigating to next track - background will update');
     nextTrack();
     // Reset transition state after a short delay
     setTimeout(() => setIsTransitioning(false), 300);
@@ -126,7 +112,6 @@ export default function PersistentPlayer() {
 
   const handlePreviousTrack = useCallback(() => {
     setIsTransitioning(true);
-    console.log('🎵 Navigating to previous track - background will update');
     previousTrack();
     // Reset transition state after a short delay
     setTimeout(() => setIsTransitioning(false), 300);
@@ -194,8 +179,6 @@ export default function PersistentPlayer() {
   // Handle volume change
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
-    console.log('Volume change triggered:', { newVolume, currentVolume: volume, localVolume });
-    
     // Ensure the volume is valid
     if (isNaN(newVolume) || newVolume < 0 || newVolume > 1) {
       console.warn('Invalid volume value:', newVolume);
@@ -292,7 +275,7 @@ export default function PersistentPlayer() {
             className="cursor-pointer w-full h-full object-cover"
             onClick={openImageModal}
             onError={handleImageError}
-            onLoadingComplete={() => setImageLoading(false)}
+            onLoad={handleImageLoad}
             style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 240ms ease' }}
           />
         </div>
@@ -352,7 +335,7 @@ export default function PersistentPlayer() {
                   fill
                   priority
                   className="object-contain w-full h-full"
-                  onLoadingComplete={() => setImageLoading(false)}
+                  onLoad={handleImageLoad}
                   onError={handleImageError}
                 />
               </div>
@@ -447,43 +430,35 @@ export default function PersistentPlayer() {
                   className="absolute inset-0 z-30"
                 />
               </div>
-              {/* Overlay shown on hover - title & artist in Nimbus font */}
-              <div className="cover-overlay pointer-events-none">
-                <div className="cover-overlay-inner">
-                  <div className="cover-title" title={getTitle(currentAlbum.metadata)}>{getTitle(currentAlbum.metadata)}</div>
-                  <div className="cover-artist" title={getArtist(currentAlbum.metadata)}>{getArtist(currentAlbum.metadata)}</div>
-                </div>
-              </div>
+
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-center">
-              {!isMobile && (
-                <>
-                  <p
-                    className="text-sm font-medium text-foreground truncate w-full block"
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '100%'
-                    }}
-                    title={getTitle(currentAlbum.metadata)}
-                  >
-                    {getTitle(currentAlbum.metadata)}
-                  </p>
-                  <p
-                    className="text-xs text-muted-foreground truncate w-full block"
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '100%'
-                    }}
-                    title={getArtist(currentAlbum.metadata)}
-                  >
-                    {getArtist(currentAlbum.metadata)}
-                  </p>
-                </>
-              )}
+              <div className="hidden md:block">
+                <p
+                  className="text-sm font-medium text-foreground truncate w-full block"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%'
+                  }}
+                  title={getTitle(currentAlbum.metadata)}
+                >
+                  {getTitle(currentAlbum.metadata)}
+                </p>
+                <p
+                  className="text-xs text-muted-foreground truncate w-full block"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%'
+                  }}
+                  title={getArtist(currentAlbum.metadata)}
+                >
+                  {getArtist(currentAlbum.metadata)}
+                </p>
+              </div>
               {isTransitioning && (
                 <p className="text-xs text-primary animate-pulse">...</p>
               )}
@@ -493,37 +468,31 @@ export default function PersistentPlayer() {
           {/* Center section - Controls (1/3 width) */}
             <div className="flex flex-col items-center space-y-2 pp-controls">
             <div className="flex items-center justify-center w-full">
-              {!isMobile && (
-                <button
-                  onClick={handlePreviousTrack}
-                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer mr-4 ${
-                    isTransitioning ? 'scale-110 text-primary' : ''
-                  }`}
-                  title="Previous track (will update background)"
-                >
-                  <SkipBack size={16} />
-        </button>
-        )}
-              {!isMobile && (
-                <button
-                  onClick={togglePlayPause}
-                  className="w-8 h-8 rounded-full bg-black/90 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer mx-2"
-                  aria-label={isPlaying ? 'Pause' : 'Play'}
-                >
-                  {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                </button>
-              )}
-        {!isMobile && (
-                <button
-                  onClick={handleNextTrack}
-                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ml-4 ${
-                    isTransitioning ? 'scale-110 text-primary' : ''
-                  }`}
-                  title="Next track (will update background)"
-                >
-                  <SkipForward size={16} />
-                </button>
-              )}
+              <button
+                onClick={handlePreviousTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer mr-4 ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Previous track (will update background)"
+              >
+                <SkipBack size={16} />
+              </button>
+              <button
+                onClick={togglePlayPause}
+                className="w-8 h-8 rounded-full bg-black/90 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer mx-2"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+              </button>
+              <button
+                onClick={handleNextTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ml-4 ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Next track (will update background)"
+              >
+                <SkipForward size={16} />
+              </button>
             </div>
             {/* timeline moved to top of player */}
           </div>
@@ -601,7 +570,6 @@ export default function PersistentPlayer() {
                 }}
                 onLoad={() => {
                   setImageLoading(false);
-                  console.log('Expanded view image loaded:', currentAlbum.metadata?.image);
                 }}
               />
             </div>
@@ -661,35 +629,33 @@ export default function PersistentPlayer() {
             </div>
 
             {/* Center - Main controls */}
-            {!isMobile && (
-              <div className="flex items-center justify-center space-x-4">
-                <button
-                  onClick={handlePreviousTrack}
-                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                    isTransitioning ? 'scale-110 text-primary' : ''
-                  }`}
-                  title="Previous track (will update background)"
-                >
-                  <SkipBack size={24} />
-                </button>
-                <button
-                  onClick={togglePlayPause}
-                  className="w-12 h-12 rounded-full bg-black/60 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
-                  aria-label={isPlaying ? 'Pause' : 'Play'}
-                >
-                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                </button>
-                <button
-                  onClick={handleNextTrack}
-                  className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
-                    isTransitioning ? 'scale-110 text-primary' : ''
-                  }`}
-                  title="Next track (will update background)"
-                >
-                  <SkipForward size={24} />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-center space-x-4">
+              <button
+                onClick={handlePreviousTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Previous track (will update background)"
+              >
+                <SkipBack size={24} />
+              </button>
+              <button
+                onClick={togglePlayPause}
+                className="w-12 h-12 rounded-full bg-black/60 backdrop-blur text-white border border-white/10 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+              </button>
+              <button
+                onClick={handleNextTrack}
+                className={`text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer ${
+                  isTransitioning ? 'scale-110 text-primary' : ''
+                }`}
+                title="Next track (will update background)"
+              >
+                <SkipForward size={24} />
+              </button>
+            </div>
 
             {/* Right - Volume */}
             {!isMobile && (

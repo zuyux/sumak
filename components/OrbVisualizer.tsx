@@ -168,8 +168,6 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
   velocityRef.current = { x: 0, y: 0 };
   moveHistoryRef.current = [];
     
-    // Prevent default to avoid scrolling/zooming on touch devices
-    event.preventDefault();
   };
 
   const handleMouseMove = (event: React.MouseEvent | React.TouchEvent) => {
@@ -210,7 +208,6 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
       
       lastMouseRef.current = { x: clientX, y: clientY };
       lastTimeRef.current = currentTime;
-      event.preventDefault();
     }
   };
 
@@ -1293,6 +1290,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         style={{
           cursor: isGrabbing ? 'grabbing' : 'grab',
           pointerEvents: 'auto',
+          touchAction: 'none',
           backgroundColor: isHovering ? `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.02)` : 'transparent',
           border: isHovering ? `1px solid rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0.1)` : '1px solid transparent'
         }}

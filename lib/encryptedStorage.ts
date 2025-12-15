@@ -394,7 +394,6 @@ export function resetSessionConfig(): void {
   if (typeof window === 'undefined') return;
   
   localStorage.setItem(CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG));
-  console.log('Session config reset to default:', DEFAULT_CONFIG);
 }
 
 /**

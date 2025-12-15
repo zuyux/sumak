@@ -59,10 +59,7 @@ export function AppLoadingProvider({
       const allAssets = [...criticalAssets, ...homeAssets, ...modelAssets];
 
       await preloader.preloadAssets(allAssets, {
-        timeout: 8000, // Longer timeout for 3D models
-        onAssetLoaded: (asset) => {
-          console.log(`✅ Asset loaded: ${asset}`);
-        }
+        timeout: 8000 // Longer timeout for 3D models
       });
 
       // Additional delay to ensure smooth loading experience
@@ -85,12 +82,9 @@ export function AppLoadingProvider({
     
     // Load page assets in background without blocking UI
     preloader.preloadAssets(allAssets, {
-      timeout: 3000,
-      onAssetLoaded: (asset) => {
-        console.log(`📄 Page asset loaded for ${pageName}:`, asset);
-      }
+      timeout: 3000
     }).catch(() => {
-      console.log(`Page assets loading completed for ${pageName}`);
+      // Fail silently so navigation is never blocked by asset issues
     });
   };
 
