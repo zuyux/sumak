@@ -1082,7 +1082,7 @@ export default function MintPage() {
         if (error.message.includes('User rejected') || error.message.includes('cancelled')) {
           throw new Error('User cancelled contract deployment');
         } else if (error.message.includes('timeout')) {
-          throw new Error(`Wallet deployment timed out. Please ensure your ${walletType === 'xverse' ? 'Xverse' : walletType === 'leather' ? 'Leather' : walletType === 'walletconnect' ? 'WalletConnect' : 'Hiro'} wallet extension is unlocked and try again.`);
+          throw new Error(`Wallet deployment timed out. Please ensure your ${walletType === 'xverse' ? 'Xverse' : walletType === 'leather' ? 'Leather' : 'Hiro'} wallet extension is unlocked and try again.`);
         } else if (error.message.includes('broadcast') || error.message.includes('failed to broadcast')) {
           throw new Error('Transaction failed to broadcast. This may be due to network congestion or insufficient fees. Please try again with a higher fee.');
         } else if (error.message.includes('unable to parse node response')) {

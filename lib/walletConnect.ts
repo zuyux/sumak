@@ -1,4 +1,3 @@
-import type { AppKitNetwork } from '@reown/appkit/networks';
 import type { CustomCaipNetwork } from '@reown/appkit-common';
 import { UniversalConnector } from '@reown/appkit-universal-connector';
 
@@ -44,7 +43,7 @@ export async function getWalletConnectConnector(): Promise<UniversalConnector> {
       networks: [
         {
           namespace: 'stacks',
-          chains: [stacksMainnet as unknown as AppKitNetwork],
+          chains: [stacksMainnet],
           methods: ['stacks_signMessage', 'stacks_signTransaction'],
           events: [],
         },
