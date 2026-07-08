@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useMusicPlayer } from './MusicPlayerContext';
+import { getAudioAnalyser } from '@/lib/audioAnalyser';
 import * as THREE from 'three';
 
 interface OrbVisualizerProps {
@@ -367,6 +368,7 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
     const canvas = circularCanvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    let circularAnimationId: number | null = null;
 
     const resizeCanvas = () => {
       canvas.width = 450;
@@ -465,10 +467,16 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
         ctx.shadowBlur = 0;
       }
       
-      requestAnimationFrame(drawCircularVisualizer);
+      circularAnimationId = requestAnimationFrame(drawCircularVisualizer);
     };
 
     drawCircularVisualizer();
+
+    return () => {
+      if (circularAnimationId !== null) {
+        cancelAnimationFrame(circularAnimationId);
+      }
+    };
   }, [settings.sensitivity, settings.reactivity, externalAudioData]);
 
   useEffect(() => {
@@ -1036,37 +1044,21 @@ const OrbVisualizer: React.FC<OrbVisualizerProps> = ({
 
   // Setup audio analysis
   useEffect(() => {
-    if (!isPlaying || !audioRef.current || !currentAlbum) return;
+    const audio = audioRef.current;
+    if (!isPlaying || !audio || !currentAlbum) return;
 
     const setupAudio = async () => {
       try {
-        if (!audioContextRef.current) {
-          // Use proper typing for AudioContext
-          const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-          audioContextRef.current = new AudioContextClass();
-        }
+        const graph = getAudioAnalyser(audio);
+        if (!graph) return;
 
-        if (audioContextRef.current.state === 'suspended') {
-          await audioContextRef.current.resume();
-        }
+        audioContextRef.current = graph.context;
+        analyserRef.current = graph.analyser;
+        sourceRef.current = graph.source;
+        frequencyDataRef.current = new Uint8Array(graph.analyser.frequencyBinCount);
 
-        if (!analyserRef.current) {
-          analyserRef.current = audioContextRef.current.createAnalyser();
-          analyserRef.current.fftSize = 2048;
-          analyserRef.current.smoothingTimeConstant = 0.8;
-          // Create frequency data array directly with the required size
-          frequencyDataRef.current = new Uint8Array(analyserRef.current.frequencyBinCount);
-        }
-
-        if (!sourceRef.current && audioRef.current) {
-          try {
-            sourceRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
-            sourceRef.current.connect(analyserRef.current);
-            analyserRef.current.connect(audioContextRef.current.destination);
-          } catch (error) {
-            // Source might already exist, ignore error
-            console.log('Audio source already connected or error:', error);
-          }
+        if (graph.context.state === 'suspended') {
+          await graph.context.resume();
         }
       } catch (error) {
         console.error('Error setting up audio analysis:', error);

@@ -332,18 +332,21 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     };
     const pushWithProxy = (candidate: string | null) => {
       if (!candidate) return;
-      push(candidate);
       const prox = maybeProxy(candidate);
       if (prox !== candidate) {
+        // Web Audio analysis requires a CORS-clean response. Prefer our
+        // same-origin proxy for IPFS gateways, then retain the direct URL as
+        // a playback fallback.
         push(prox);
       }
+      push(candidate);
     };
 
     const trimmed = (preferIpfsGateway(rawUrl) ?? rawUrl).trim();
     const canonical = convertToIpfsIo(trimmed);
     const ipfsHash = extractIpfsHash(trimmed);
 
-    // Always try the original URL first
+    // Start with the preferred URL (proxied first when it is an IPFS gateway).
     pushWithProxy(trimmed);
 
     if (ipfsHash) {

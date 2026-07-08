@@ -66,54 +66,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.headers.range) {
       headers.Range = String(req.headers.range);
     }
-    let lastFailure: string | null = null;
+    const candidates = buildCandidateUrls(target);
+    const controllers = candidates.map(() => new AbortController());
 
-    for (const candidate of buildCandidateUrls(target)) {
-      try {
-        const upstream = await fetch(candidate, {
-          headers,
-          signal: AbortSignal.timeout(8000),
-        });
-
-        if (!upstream.ok) {
-          lastFailure = `Upstream fetch failed: ${upstream.status} ${upstream.statusText}`;
-          continue;
+    // Race the gateways instead of waiting through several sequential
+    // timeouts. IPFS gateway latency varies considerably by CID.
+    const { upstream, winnerIndex } = await Promise.any(
+      candidates.map(async (candidate, index) => {
+        const controller = controllers[index];
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(candidate, {
+            headers,
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(
+              `Upstream fetch failed: ${response.status} ${response.statusText}`,
+            );
+          }
+          return { upstream: response, winnerIndex: index };
+        } finally {
+          clearTimeout(timeout);
         }
+      }),
+    );
 
-        const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
-        const cacheControl = upstream.headers.get('cache-control');
-        const contentLength = upstream.headers.get('content-length');
-        const contentRange = upstream.headers.get('content-range');
-        const acceptRanges = upstream.headers.get('accept-ranges');
+    controllers.forEach((controller, index) => {
+      if (index !== winnerIndex) controller.abort();
+    });
 
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', contentType);
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+    const cacheControl = upstream.headers.get('cache-control');
+    const contentLength = upstream.headers.get('content-length');
+    const contentRange = upstream.headers.get('content-range');
+    const acceptRanges = upstream.headers.get('accept-ranges');
 
-        if (cacheControl) {
-          res.setHeader('Cache-Control', cacheControl);
-        }
-        if (contentLength) {
-          res.setHeader('Content-Length', contentLength);
-        }
-        if (contentRange) {
-          res.setHeader('Content-Range', contentRange);
-        }
-        if (acceptRanges) {
-          res.setHeader('Accept-Ranges', acceptRanges);
-        }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', contentType);
 
-        const buffer = await upstream.arrayBuffer();
-        res.status(upstream.status).send(Buffer.from(buffer));
-        return;
-      } catch (error) {
-        lastFailure = error instanceof Error ? error.message : 'Unknown proxy fetch error';
-      }
+    if (cacheControl) {
+      res.setHeader('Cache-Control', cacheControl);
+    }
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+    if (contentRange) {
+      res.setHeader('Content-Range', contentRange);
+    }
+    if (acceptRanges) {
+      res.setHeader('Accept-Ranges', acceptRanges);
     }
 
-    console.error('Proxy exhausted IPFS candidates for', url, lastFailure);
-    res.status(502).send(lastFailure ?? 'Proxy fetch error');
+    const buffer = await upstream.arrayBuffer();
+    res.status(upstream.status).send(Buffer.from(buffer));
   } catch (error) {
     console.error('Proxy error fetching', url, error);
-    res.status(500).send('Proxy fetch error');
+    res.status(502).send('Proxy fetch error');
   }
 }
