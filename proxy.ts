@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Agregar cabeceras CORS para todas las respuestas
   const response = NextResponse.next();
   
