@@ -16,7 +16,7 @@ import { getApiUrl } from "@/lib/stacks-api";
 import { getPersistedNetwork, resolveNetwork } from "@/lib/network";
 import { getSBTCContract } from "@/lib/contracts";
 
-import { Copy, X, LoaderCircle, Wallet } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Check, Copy, LoaderCircle, LockKeyhole, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
@@ -36,6 +36,7 @@ export default function WalletPage() {
   const [sendAmount, setSendAmount] = useState("");
   const [sendPassword, setSendPassword] = useState("");
   const [sendLoading, setSendLoading] = useState(false);
+  const [addressCopied, setAddressCopied] = useState(false);
   const [extensionAvailable, setExtensionAvailable] = useState(false);
   // Detect if Hiro Wallet extension is available and connected (optional, can remove if not needed)
   useEffect(() => {
@@ -136,7 +137,7 @@ export default function WalletPage() {
             provider = (win.StacksProvider ?? null) as { request?: (method: string, params?: unknown) => Promise<unknown> };
           }
           if (!provider) {
-            toast.error('No se encontró una extensión de billetera compatible.');
+            toast.error('No compatible wallet extension was found.');
             setSendLoading(false);
             return;
           }
@@ -169,7 +170,7 @@ export default function WalletPage() {
               throw err;
             }
           }
-          toast.success('¡Transacción enviada vía extensión!');
+          toast.success('Transaction submitted through your wallet extension.');
           setShowSend(false);
           setSendTo("");
           setSendAmount("");
@@ -205,7 +206,7 @@ export default function WalletPage() {
       }
       // 1. Decrypt wallet with password
       const wallet = await retrieveEncryptedWallet(sendPassword);
-      if (!wallet || !wallet.privateKey) throw new Error("Contraseña inválida o billetera no encontrada");
+      if (!wallet || !wallet.privateKey) throw new Error("Invalid password or wallet not found");
 
       // 2. Prepare transaction
       const network = getSigningNetwork();
@@ -219,9 +220,9 @@ export default function WalletPage() {
       // 3. Broadcast transaction
       const result = await broadcastTransaction({ transaction: tx, network });
       if ('txid' in result) {
-        toast.success(`¡Transacción enviada! TXID: ${result.txid}`);
+        toast.success(`Transaction submitted. TXID: ${result.txid}`);
       } else {
-        toast.error(result || 'Fallo al transmitir');
+        toast.error(result || 'Transaction broadcast failed');
       }
       setShowSend(false);
       setSendTo("");
@@ -229,9 +230,9 @@ export default function WalletPage() {
       setSendPassword("");
     } catch (err: unknown) {
       if (err instanceof Error) {
-        toast.error(err.message || 'Error al enviar STX');
+        toast.error(err.message || 'Unable to send STX');
       } else {
-        toast.error('Error al enviar STX');
+        toast.error('Unable to send STX');
       }
     } finally {
       setSendLoading(false);
@@ -272,15 +273,15 @@ export default function WalletPage() {
   if (!address) {
     return (
       <div className="max-w-xl mx-auto my-24 p-8 rounded-2xl border shadow flex flex-col items-center justify-center select-none bg-card text-card-foreground border-border">
-        <h1 className="text-3xl font-bold mb-6">Billetera</h1>
+        <h1 className="text-3xl font-bold mb-6">Wallet</h1>
         <p className="mb-8 text-lg text-muted-foreground text-center">
-          Por favor conecta tu billetera para gestionar tus fondos.
+          Connect your wallet to manage your funds.
         </p>
         <Link
           href="/"
           className="py-3 px-6 rounded-xl border bg-primary text-primary-foreground hover:bg-secondary hover:text-secondary-foreground border-border transition-all duration-200 focus:outline-none cursor-pointer select-none"
         >
-          Conectar Billetera
+          Connect wallet
         </Link>
       </div>
     );
@@ -292,7 +293,7 @@ export default function WalletPage() {
       <div className="max-w-xl mx-auto p-8 bg-card rounded-2xl border border-border shadow text-card-foreground select-none min-w-[100vw] lg:min-w-1/4">
         <div className="my-2 flex items-center justify-left">
           <Wallet className="w-8 h-8 text-foreground" />
-          <h1 className="title text-lg mx-4 font-bold">Billetera</h1>
+          <h1 className="title text-lg mx-4 font-bold">Wallet</h1>
         </div>        
       <div className="mt-2 flex justify-center">
         <div className="flex items-center gap-3">
@@ -322,75 +323,126 @@ export default function WalletPage() {
           className="bg-background border border-border text-foreground w-full px-6 py-3 rounded-xl hover:bg-secondary hover:text-secondary-foreground cursor-pointer select-none transition-all duration-200"
           onClick={() => setShowSend(true)}
         >
-          Enviar
+          Send
         </button>
         <button
           className="bg-transparent border border-border text-foreground px-6 py-3 rounded-xl hover:bg-secondary hover:text-secondary-foreground cursor-pointer select-none transition-all duration-200"
           onClick={() => setShowReceive(true)}
         >
-          Recibir
+          Receive
         </button>
       </div>
 
 
       {/* Send Modal */}
       {showSend && (
-        <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
-          <div className="bg-background text-foreground p-6 rounded-2xl border border-foreground shadow-xl w-full max-w-sm">
-            <div className="flex items-center justify-end">
-                <button onClick={() => setShowSend(false)}
-                    className="bg-none border-none text-[#555] text-xl cursor-pointer" aria-label="Close" type="button">
-                <X className="h-[18px]"/>
-                </button>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="send-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !sendLoading) setShowSend(false);
+          }}
+        >
+          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 text-card-foreground shadow-2xl md:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                  <ArrowUpRight className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 id="send-modal-title" className="text-xl font-semibold">Send STX</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Enter the recipient and amount to transfer.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSend(false)}
+                className="rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+                aria-label="Close send dialog"
+                type="button"
+                disabled={sendLoading}
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <form onSubmit={handleSend} className="space-y-6 mt-6">
+
+            <form onSubmit={handleSend} className="mt-8 space-y-5">
               <div>
+                <label htmlFor="send-recipient" className="mb-2 block text-sm font-medium">
+                  Recipient address
+                </label>
                 <input
-                  className="w-full px-6 py-3 rounded-xl border border-foreground bg-background text-foreground focus:outline-none"
+                  id="send-recipient"
+                  className="w-full rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-foreground focus:ring-2 focus:ring-foreground/10"
                   value={sendTo}
                   onChange={e => setSendTo(e.target.value)}
                   required
-                  placeholder="SP..XYZ"
+                  placeholder="SP…XYZ"
                   disabled={sendLoading}
+                  autoComplete="off"
                 />
               </div>
               <div>
-                <input
-                  className="w-full px-6 py-8 rounded-xl border border-foreground bg-background text-foreground focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:m-0 text-right text-xl"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={sendAmount}
-                  onChange={e => setSendAmount(e.target.value)}
-                  required
-                  placeholder="Cantidad"
-                  disabled={sendLoading}
-                  style={{ MozAppearance: "textfield" } as React.CSSProperties}
-                />
+                <label htmlFor="send-amount" className="mb-2 block text-sm font-medium">
+                  Amount
+                </label>
+                <div className="relative">
+                  <input
+                    id="send-amount"
+                    className="w-full rounded-xl border border-input bg-background px-4 py-5 pr-16 text-2xl font-semibold text-foreground outline-none transition placeholder:text-muted-foreground/40 focus:border-foreground focus:ring-2 focus:ring-foreground/10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    type="number"
+                    min="0.000001"
+                    step="0.000001"
+                    value={sendAmount}
+                    onChange={e => setSendAmount(e.target.value)}
+                    required
+                    placeholder="0.00"
+                    disabled={sendLoading}
+                    style={{ MozAppearance: "textfield" } as React.CSSProperties}
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                    STX
+                  </span>
+                </div>
               </div>
               {/* Only show password input if not using extension or extension is not available */}
               {!extensionAvailable && (
                 <div>
-                  <input
-                    className="w-full px-6 py-3 rounded-xl border border-foreground bg-background text-foreground focus:outline-none"
-                    type="password"
-                    value={sendPassword}
-                    onChange={e => setSendPassword(e.target.value)}
-                    required
-                    placeholder="Contraseña de billetera"
-                    disabled={sendLoading}
-                  />
+                  <label htmlFor="send-password" className="mb-2 block text-sm font-medium">
+                    Wallet password
+                  </label>
+                  <div className="relative">
+                    <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="send-password"
+                      className="w-full rounded-xl border border-input bg-background py-3 pl-11 pr-4 text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-foreground focus:ring-2 focus:ring-foreground/10"
+                      type="password"
+                      value={sendPassword}
+                      onChange={e => setSendPassword(e.target.value)}
+                      required
+                      placeholder="Enter your password"
+                      disabled={sendLoading}
+                      autoComplete="current-password"
+                    />
+                  </div>
                 </div>
               )}
-              <div>
-                <button
-                  type="submit"
-                  className="w-full py-3 px-4 rounded-xl border-[1px] border-foreground bg-background text-foreground transition-all duration-200 focus:outline-none cursor-pointer select-none"
-                  disabled={sendLoading}
-                >
-                  {sendLoading ? (extensionAvailable ? 'Enviando vía extensión...' : 'Enviando...') : 'Enviar'}
-                </button>
-              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Review the address carefully. Blockchain transactions cannot be reversed.
+              </p>
+              <button
+                type="submit"
+                className="cursor-pointer flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3.5 font-semibold text-background transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={sendLoading || !sendTo.trim() || Number(sendAmount) <= 0 || (!extensionAvailable && !sendPassword)}
+              >
+                {sendLoading && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                {sendLoading
+                  ? (extensionAvailable ? 'Confirm in wallet…' : 'Sending…')
+                  : 'Review and send'}
+              </button>
             </form>
           </div>
         </div>
@@ -398,73 +450,92 @@ export default function WalletPage() {
 
       {/* Receive Modal */}
       {showReceive && (
-        <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
-          <div className="bg-background text-foreground p-8 rounded-2xl border border-[#333] shadow-xl w-full max-w-sm text-center">
-            <div className="flex items-center justify-end">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="receive-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowReceive(false);
+          }}
+        >
+          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 text-card-foreground shadow-2xl md:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-3 text-left">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                  <ArrowDownToLine className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 id="receive-modal-title" className="text-xl font-semibold">Receive funds</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Share your Stacks address.</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowReceive(false)}
-                className="bg-none border-none text-[#555] text-xl cursor-pointer"
-                aria-label="Close"
+                className="rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                aria-label="Close receive dialog"
                 type="button"
               >
-                <X className="h-[18px]" />
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <h2 className="text-xl font-bold mb-6">Recibir</h2>
-            <div className="mb-6">
+
+            <div className="mx-auto my-8 max-w-[280px]">
               {address ? (
-                <div className="w-full p-6 flex items-center justify-center rounded-xl bg-background">
+                <div className="flex w-full items-center justify-center rounded-2xl bg-white p-4 shadow-inner">
                   <QRCodeSVG
                     value={address}
                     width="100%"
                     height="100%"
                     size={256}
                     bgColor="#fff"
-                    fgColor="#181818"
+                    fgColor="#050505"
                     includeMargin={false}
                     level="M"
                     style={{ width: "100%", height: "auto", maxWidth: 256, maxHeight: 256 }}
                   />
                 </div>
               ) : (
-                <div className="w-32 h-32 mx-auto bg-gray-800 flex items-center justify-center rounded-xl text-gray-400">
-                  QR
-                </div>
+                <div className="flex aspect-square w-full items-center justify-center rounded-2xl bg-muted text-muted-foreground">QR unavailable</div>
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-light px-8 py-2 rounded-xl text-sm break-all select-text">{address}</span>
-                
-              </div>
-              <button
-                  className="text-center text-foreground text-sm p-1 rounded transition"
-                  onClick={() => {
-                    if (address) {
-                      navigator.clipboard.writeText(address);
-                      toast.success("¡Dirección copiada!");
-                    }
-                  }}
-                  aria-label="Copy address"
-                  type="button"
-                >
-                  <Copy size={18} className="text-accent-foreground cursor-pointer"/>
-                </button>
+
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="break-all font-mono text-xs leading-5 text-muted-foreground select-text">{address}</p>
             </div>
+            <button
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-3.5 font-semibold text-background transition hover:opacity-85 cursor-pointer"
+              onClick={async () => {
+                if (address) {
+                  await navigator.clipboard.writeText(address);
+                  setAddressCopied(true);
+                  toast.success("Address copied");
+                  window.setTimeout(() => setAddressCopied(false), 2000);
+                }
+              }}
+              aria-label="Copy wallet address"
+              type="button"
+            >
+              {addressCopied ? <Check size={18} /> : <Copy size={18} />}
+              {addressCopied ? 'Copied' : 'Copy address'}
+            </button>
+            <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
+              Only send assets supported on the Stacks network to this address.
+            </p>
           </div>
         </div>
       )}
 
       {/* Recent Transactions */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold mb-4">Transacciones Recientes</h2>
+        <h2 className="text-lg font-semibold mb-4">Recent transactions</h2>
         <div className="bg-card rounded-xl py-4 max-h-96 overflow-y-auto border border-border">
           {txLoading ? (
             <div className="flex justify-center items-center py-8">
               <LoaderCircle className="animate-spin text-foreground" size={32} />
             </div>
           ) : transactions.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">No se encontraron transacciones recientes.</div>
+            <div className="text-center text-muted-foreground py-8">No recent transactions found.</div>
           ) : (
             <ul className="space-4 mx-4">
               {transactions.map((tx) => (
@@ -481,11 +552,11 @@ export default function WalletPage() {
                       <div className="text-sm mt-1">
                         {tx.tx_type === 'token_transfer' ? (
                           <>
-                            <span className="font-semibold">{tx.sender_address === address ? 'Enviado' : 'Recibido'}</span>
+                            <span className="font-semibold">{tx.sender_address === address ? 'Sent' : 'Received'}</span>
                             {tx.sender_address === address ? (
-                              <> a <span className="font-mono">{tx.token_transfer?.recipient_address?.slice(0, 8)}...{tx.token_transfer?.recipient_address?.slice(-6)}</span></>
+                              <> to <span className="font-mono">{tx.token_transfer?.recipient_address?.slice(0, 8)}...{tx.token_transfer?.recipient_address?.slice(-6)}</span></>
                             ) : (
-                              <> de <span className="font-mono">{tx.sender_address.slice(0, 8)}...{tx.sender_address.slice(-6)}</span></>
+                              <> from <span className="font-mono">{tx.sender_address.slice(0, 8)}...{tx.sender_address.slice(-6)}</span></>
                             )}
                             <span className="ml-2">{tx.token_transfer?.amount ? Number(tx.token_transfer.amount) / 1e6 : ''} STX</span>
                           </>

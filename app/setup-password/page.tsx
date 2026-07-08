@@ -4,7 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useEncryptedWallet } from '@/components/EncryptedWalletProvider';
+import { useWallet } from '@/components/WalletProvider';
 import { Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
+import CryptoJS from 'crypto-js';
+import { createPortableEncryptedWallet } from '@/lib/encryptedStorage';
+import { storeEncryptedAccount } from '@/lib/connectedAccountsApi';
+import { persistSumakSession } from '@/lib/sessionUtils';
 
 export default function SetupPasswordPage() {
   const [email, setEmail] = useState('');
@@ -15,6 +20,7 @@ export default function SetupPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { createEncryptedWallet } = useEncryptedWallet();
+  const { setAddress, setWalletType } = useWallet();
 
   useEffect(() => {
     // Get email from sessionStorage
@@ -88,15 +94,43 @@ export default function SetupPasswordPage() {
 
       // New user - create encrypted wallet with generated keys
       console.log('🔐 Creating encrypted wallet for:', data.walletData.address);
-      await createEncryptedWallet(
-        {
-          mnemonic: data.walletData.mnemonic,
-          privateKey: data.walletData.privateKey,
-          address: data.walletData.address,
-          label: data.walletData.label || `Wallet for ${email}`,
-        },
-        password
-      );
+      const walletDataPayload = {
+        mnemonic: data.walletData.mnemonic,
+        privateKey: data.walletData.privateKey,
+        address: data.walletData.address,
+        label: data.walletData.label || `Wallet for ${email}`,
+      };
+
+      await createEncryptedWallet(walletDataPayload, password);
+
+      try {
+        const normalizedEmail = email.trim().toLowerCase();
+        const passkeyHash = CryptoJS.SHA256(walletDataPayload.privateKey + password).toString();
+        const portableWallet = createPortableEncryptedWallet(walletDataPayload, password);
+        await storeEncryptedAccount({
+          email: normalizedEmail,
+          address: walletDataPayload.address,
+          passkeyHash,
+          walletLabel: walletDataPayload.label,
+          portableWallet,
+        });
+
+        setAddress(walletDataPayload.address);
+        setWalletType('imported');
+        persistSumakSession(walletDataPayload.address, {
+          walletType: 'imported',
+          provider: 'imported',
+          email: normalizedEmail,
+          label: walletDataPayload.label,
+        });
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sumak_user_email', normalizedEmail);
+        }
+      } catch (syncError) {
+        console.error('Failed to sync encrypted wallet:', syncError);
+        throw new Error('Failed to sync wallet for email login. Please try again.');
+      }
       
       // createEncryptedWallet already sets sumak_session in localStorage
       // and dispatches the session update event
@@ -104,9 +138,9 @@ export default function SetupPasswordPage() {
 
       // Store wallet data in sessionStorage for account page (to show mnemonic)
       sessionStorage.setItem('sumak_new_wallet', JSON.stringify({
-        mnemonic: data.walletData.mnemonic,
-        stxPrivateKey: data.walletData.privateKey,
-        address: data.walletData.address,
+        mnemonic: walletDataPayload.mnemonic,
+        stxPrivateKey: walletDataPayload.privateKey,
+        address: walletDataPayload.address,
       }));
 
       toast.success('Account created successfully!');

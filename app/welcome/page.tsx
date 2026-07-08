@@ -67,7 +67,7 @@ export default function WelcomePage() {
               <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-10 h-10 text-green-400" />
               </div>
-              <CardTitle className="text-3xl text-foreground mb-2">Bien ahí SBTC!</CardTitle>
+              <CardTitle className="text-3xl text-foreground mb-2">Well done!</CardTitle>
               <p className="text-muted-foreground">
                 Tu billetera ha sido creada y asegurada exitosamente
               </p>
@@ -117,7 +117,7 @@ export default function WelcomePage() {
 
               <Button
                 onClick={handleContinue}
-                className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-semibold py-3 cursor-pointer"
+                className="w-full bg-foreground hover:bg-foreground text-primary-foreground font-semibold py-6 cursor-pointer"
               >
                 Continuar al Respaldo
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -223,7 +223,7 @@ export default function WelcomePage() {
               <Button
                 onClick={handleContinue}
                 disabled={!acknowledgedBackup}
-                className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-semibold py-3 disabled:opacity-50 cursor-pointer"
+                className="w-full bg-foreground hover:bg-foreground/80 text-primary-foreground font-semibold py-6 disabled:opacity-50 cursor-pointer"
               >
                 He Respaldado Mi Frase
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -284,7 +284,7 @@ export default function WelcomePage() {
 
               <Button
                 onClick={handleContinue}
-                className="w-full bg-green-600 hover:bg-green-500 text-primary-foreground font-semibold py-6 cursor-pointer"
+                className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-6 cursor-pointer"
               >
                 Completar Configuración
                 <CheckCircle className="w-4 h-4 ml-2" />

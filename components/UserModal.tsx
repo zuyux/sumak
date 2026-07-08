@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Bell, Settings, HelpCircle, LogOut, User } from 'lucide-react';
+import { Settings, LogOut, User } from 'lucide-react';
 import { useWallet } from './WalletProvider';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
@@ -158,10 +158,15 @@ export default function UserModal({ onClose }: UserModalProps) {
       localStorage.removeItem('walletAddress');
       localStorage.removeItem('sumak_user_email'); // Email association
       
-      // Clear any wallet-specific encrypted storage (dynamic keys: encrypted_wallet_${address})
+      // Clear any wallet-specific encrypted storage (dynamic keys) or other Sumak session keys
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('encrypted_wallet_')) {
+        if (!key) continue;
+
+        const isEncryptedWalletKey = key.startsWith('encrypted_wallet_');
+        const isSumakSessionKey = key.startsWith('sumak_');
+
+        if (isEncryptedWalletKey || isSumakSessionKey) {
           localStorage.removeItem(key);
         }
       }
@@ -260,25 +265,11 @@ export default function UserModal({ onClose }: UserModalProps) {
         </div>
         <div className="grid grid-cols-2 gap-3 w-full mb-2 font-sans text-base">
           <button
-            onClick={() => { onClose(); router.push('/notifications'); }}
-            className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-sm rounded-xl py-4 text-sm text-gray-900 dark:text-white hover:bg-white/7 border border-white/10 cursor-pointer select-none"
-          >
-            <Bell className="mb-2" size={20} />
-            Notifications
-          </button>
-          <button
             onClick={() => { onClose(); router.push('/settings'); }}
             className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-sm rounded-xl py-4 text-sm text-gray-900 dark:text-white hover:bg-white/7 border border-white/10 cursor-pointer select-none"
           >
             <Settings className="mb-2" size={20} />
             Settings
-          </button>
-          <button
-            onClick={() => { onClose(); router.push('/support'); }}
-            className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-sm rounded-xl py-4 text-sm text-gray-900 dark:text-white hover:bg-white/7 border border-white/10 cursor-pointer select-none"
-          >
-            <HelpCircle className="mb-2" size={20} />
-            Help
           </button>
           <button
             className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-sm rounded-xl py-4 text-gray-900 dark:text-white text-sm hover:bg-white/7 border border-white/10 cursor-pointer select-none"

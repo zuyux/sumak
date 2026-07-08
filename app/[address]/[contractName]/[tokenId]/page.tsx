@@ -875,9 +875,38 @@ export default function NFTDetailPage() {
                     {/* Details Section */}
                     <div>
                       <h3 className="text-lg font-semibold mb-6">Details</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                        <div className="p-4 rounded-lg bg-muted/30 border border-border/40">
+                          <div className="text-xs text-muted-foreground">Publisher</div>
+                          <div className="text-sm font-medium flex flex-wrap items-center gap-2 mt-1">
+                            {(deployerAddress || address) ? (
+                              <>
+                                <Link href={`/${deployerAddress || address}`} className="font-mono">
+                                  {(deployerAddress || address).slice(0, 6)}...{(deployerAddress || address).slice(-4)}
+                                </Link>
+                                {creatorProfile?.username && (
+                                  <span className="text-xs text-foreground">@{creatorProfile.username}</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="inline-block h-5 w-24 bg-muted animate-pulse rounded"></span>
+                            )}
+                          </div>
+                        </div>
+                        {owner && (
+                          <div className="p-4 rounded-lg bg-muted/30 border border-border/40">
+                            <div className="text-xs text-muted-foreground">Current owner</div>
+                            <div className="text-sm font-medium font-mono mt-1">
+                              <Link href={`/${owner}`}>
+                                {owner.slice(0, 6)}...{owner.slice(-4)}
+                              </Link>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <div className="space-y-4">
                         <a
-                          href={`https://explorer.hiro.so/txid/${address}.${contractName}?chain=testnet`}
+                          href={`https://explorer.hiro.so/txid/${address}.${contractName}?chain=mainnet`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/40 transition-colors cursor-pointer"
@@ -907,6 +936,7 @@ export default function NFTDetailPage() {
                           )}
                         </div>
                       </div>
+ 
                     </div>
 
                     {/* Royalties */}
@@ -1253,44 +1283,6 @@ export default function NFTDetailPage() {
                     }
                     return null;
                   })()}
-                  {/* Creator & Owner Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="text-xs text-muted-foreground">Publisher</div>
-                          <div className="text-sm font-medium flex items-center gap-2">
-                            {(deployerAddress || address) ? (
-                              <>
-                                <Link href={`/${deployerAddress || address}`} className="font-mono">
-                                  {(deployerAddress || address).slice(0, 6)}...{(deployerAddress || address).slice(-4)}
-                                </Link>
-                                {creatorProfile?.username && (
-                                  <span className="ml-2 text-xs text-foreground">@{creatorProfile.username}</span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="inline-block h-5 w-24 bg-muted animate-pulse rounded"></span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                  {owner && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="text-xs text-muted-foreground">Current owner</div>
-                          <div className="text-sm font-medium font-mono">
-                            <Link href={`/${owner}`}>{owner.slice(0, 6)}...{owner.slice(-4)}</Link>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-3 mt-6">

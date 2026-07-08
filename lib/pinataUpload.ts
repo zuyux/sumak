@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { preferIpfsGateway } from './ipfs-utils';
 
 export interface PinataUploadResponse {
   IpfsHash: string;
@@ -169,7 +170,8 @@ export function getIPFSUrl(cid: string): string {
   const gatewayUrl = process.env.NEXT_PUBLIC_PINATA_GATEWAY_URL || 
                      process.env.PINATA_GATEWAY_URL || 
                      'https://ipfs.io'; // Default to ipfs.io
-  return `${gatewayUrl}/ipfs/${cid}`;
+  const url = `${gatewayUrl}/ipfs/${cid}`;
+  return preferIpfsGateway(url) || url;
 }
 
 /**
@@ -180,10 +182,10 @@ export function getIPFSFallbackUrls(cid: string): string[] {
   const fallbackGateways = [
     'https://ipfs.io', // Primary gateway
     'https://gateway.ipfs.io',
-    'https://cloudflare-ipfs.com',
     'https://dweb.link',
     'https://gateway.pinata.cloud',
     'https://nftstorage.link',
+    'https://w3s.link',
   ];
   
   return fallbackGateways.map(gateway => `${gateway}/ipfs/${cid}`);
@@ -196,7 +198,8 @@ export function getOptimizedIPFSUrl(cid: string, width?: number, height?: number
   const gatewayUrl = process.env.NEXT_PUBLIC_PINATA_GATEWAY_URL || 
                      process.env.PINATA_GATEWAY_URL || 
                      'https://ipfs.io';
-  const baseUrl = `${gatewayUrl}/ipfs/${cid}`;
+  const rawBaseUrl = `${gatewayUrl}/ipfs/${cid}`;
+  const baseUrl = preferIpfsGateway(rawBaseUrl) || rawBaseUrl;
   const params = new URLSearchParams();
   
   if (width) params.append('img-width', width.toString());

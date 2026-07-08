@@ -6,7 +6,6 @@ import { Search } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { SearchModal } from './SearchModal';
 import GetInModal from './GetInModal';
-import AddMintButton from './AddMintButton';
 import { useFullscreenContext } from './FullscreenProvider';
 
 export const Navbar = () => {
@@ -50,12 +49,21 @@ export const Navbar = () => {
                 />
               </div>
             </div>
+
+            {/* Right: App CTA */}
+            <div className="flex justify-end mr-10">
+              <Link
+                href="/player"
+                className="mr-2 inline-flex items-center rounded-xl bg-foreground px-4 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-80 md:mr-3 md:px-5 md:text-sm"
+              >
+                Launch App
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
       <SearchModal open={searchOpen} onClose={handleCloseSearch} />
   {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
-  <AddMintButton />
 
       <style jsx>{`
         .mobile-hide-placeholder::placeholder {

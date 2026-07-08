@@ -1,200 +1,137 @@
-'use client';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  AudioLines,
+  Bitcoin,
+  Disc3,
+  Headphones,
+  Radio,
+  Sparkles,
+} from 'lucide-react';
 
-import { Navbar } from '@/components/Navbar';
-import { useMusicPlayer } from '@/components/MusicPlayerContext';
-import OrbVisualizer from '@/components/OrbVisualizer';
-import Image from 'next/image';
-import { useRef, useEffect, useCallback, useState } from 'react';
+const features = [
+  {
+    icon: Headphones,
+    label: 'Listen',
+    title: 'Discover sound differently.',
+    copy: 'Explore music through an immersive player built to keep the artwork, artist, and sound in one place.',
+  },
+  {
+    icon: Disc3,
+    label: 'Collect',
+    title: 'Own the music you love.',
+    copy: 'Collect limited digital releases with provenance secured on the Bitcoin economy through Stacks.',
+  },
+  {
+    icon: Sparkles,
+    label: 'Create',
+    title: 'Release on your terms.',
+    copy: 'Turn original music into a collectible release and connect directly with the people listening.',
+  },
+];
 
-export default function Page() {
-  const {
-    currentAlbum,
-    isPlaying,
-  } = useMusicPlayer();
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number | null>(null);
-  const [backgroundImageLoaded, setBackgroundImageLoaded] = useState(false);
-  // ...existing code...
-
-  // Reset background image state when album changes
-  useEffect(() => {
-    setBackgroundImageLoaded(false); // Reset load state when album changes
-  }, [currentAlbum?.id, currentAlbum?.metadata]);
-
-  // Visualizer animation function
-  const drawVisualizer = useCallback(() => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    ctx.clearRect(0, 0, width, height);
-
-    // Fallback visualization with hundreds of bars
-    const numBars = Math.floor(width / 2); // 2 pixels per bar for dense visualization
-    const barWidth = width / numBars;
-    const time = Date.now() * 0.003; // Slow animation
-
-    for (let i = 0; i < numBars; i++) {
-      // Create animated bars using sine waves
-      const frequency1 = Math.sin(time + i * 0.02) * 0.5 + 0.5;
-      const frequency2 = Math.sin(time * 1.5 + i * 0.01) * 0.3 + 0.3;
-      const frequency3 = Math.sin(time * 0.8 + i * 0.04) * 0.2 + 0.2;
-      
-      const barHeight = (frequency1 + frequency2 + frequency3) * height * 0.6;
-      const x = i * barWidth;
-      const y = height - barHeight;
-
-      // Use white with low opacity
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.fillRect(x, y, barWidth, barHeight);
-    }
-
-    if (isPlaying) {
-      animationRef.current = requestAnimationFrame(drawVisualizer);
-    }
-  }, [isPlaying]);
-
-  // Start visualizer when playing
-  useEffect(() => {
-    if (isPlaying) {
-      drawVisualizer();
-    } else if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isPlaying, drawVisualizer]);
-
-  // Update canvas size and redraw when window resizes
-  useEffect(() => {
-    const handleResize = () => {
-      if (canvasRef.current) {
-        const canvas = canvasRef.current;
-        const container = canvas.parentElement;
-        if (container) {
-          canvas.width = container.clientWidth;
-          canvas.height = 60;
-        }
-      }
-    };
-
-    // Set initial size
-    handleResize();
-    
-    // Add resize listener
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-
-
+export default function HomePage() {
   return (
-    <div className="bg-transparent">
-      <Navbar />
-      
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground p-4 md:p-8 overflow-hidden">
-        {/* Blurred Background Image with proper loading */}
-        {currentAlbum?.metadata?.image ? (
-          <>
-            {/* Use Next.js Image component for better loading control */}
-            <div 
-              className="fixed inset-0" 
-              style={{ 
-                zIndex: -20,
-                opacity: backgroundImageLoaded ? 1 : 0,
-                transition: 'opacity 1s ease-in-out'
-              }}
-            >
-              <Image
-                key={`bg-img-${currentAlbum.id}`}
-                src={currentAlbum.metadata.image}
-                alt="Background"
-                fill
-                sizes="100vw"
-                className="object-cover"
-                style={{
-                  filter: 'blur(40px) brightness(0.4)',
-                  transform: 'scale(1.1)',
-                }}
-                onLoad={() => setBackgroundImageLoaded(true)}
-                onError={() => setBackgroundImageLoaded(false)}
-                priority={false}
-                unoptimized={true} // Since these are IPFS images
-              />
-            </div>
-            {/* Dark overlay for better text readability */}
-            <div 
-              className="fixed inset-0 w-full h-full bg-black/20"
-              style={{ 
-                zIndex: -10,
-                opacity: backgroundImageLoaded ? 1 : 0,
-                transition: 'opacity 1s ease-in-out'
-              }}
-            />
-          </>
-        ) : null}
-        
-        {/* Fallback background when no image or loading failed */}
-        <div 
-          className="fixed inset-0 bg-gradient-to-br from-gray-900 to-black" 
-          style={{ 
-            zIndex: -30,
-            opacity: (!currentAlbum?.metadata?.image || !backgroundImageLoaded) ? 1 : 0,
-            transition: 'opacity 1s ease-in-out'
-          }} 
-        />
-        
-        <OrbVisualizer />
-    </div>
-      <style jsx>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: hsl(var(--primary));
-          cursor: pointer;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: hsl(var(--primary));
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-      `}</style>
+    <div className="relative min-h-screen overflow-hidden bg-[#050505] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_18%,rgba(124,92,255,0.18),transparent_32%),radial-gradient(circle_at_18%_72%,rgba(255,112,67,0.12),transparent_28%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px)] [background-size:72px_72px]" />
 
-      <style jsx global>{`
-        @keyframes spin-slow {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        
-        .animate-spin-slow {
-          animation: spin-slow 8s linear infinite;
-        }
-      `}</style>
+      <section className="relative mx-auto flex min-h-[92vh] max-w-7xl flex-col justify-center px-6 pb-20 pt-28 md:px-10">
+        <div className="mb-8 flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-white/70 backdrop-blur">
+          <Radio className="h-3.5 w-3.5" />
+          Sounds &amp; sats
+        </div>
+
+        <div className="grid items-end gap-12 lg:grid-cols-[1.25fr_.75fr]">
+          <div>
+            <h1 className="title max-w-5xl text-[clamp(4rem,12vw,10rem)] leading-[0.78] tracking-[-0.06em]">
+              MUSIC,
+              <br />
+              <span className="text-white/35">WITH VALUE.</span>
+            </h1>
+          </div>
+
+          <div className="max-w-lg pb-2 lg:pb-4">
+            <p className="text-lg leading-relaxed text-white/65 md:text-xl">
+              SUMAK is a home for independent sound—where artists release music
+              as digital collectibles and listeners discover, play, and own it.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/player"
+                className="group inline-flex items-center gap-3 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-white/85"
+              >
+                Open the player
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+              <Link
+                href="/mint"
+                className="inline-flex items-center gap-3 rounded-full border border-white/20 px-6 py-3.5 text-sm font-medium text-white transition hover:border-white/45 hover:bg-white/5"
+              >
+                Release music
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-20 flex items-center gap-4 text-xs uppercase tracking-[0.22em] text-white/35">
+          <AudioLines className="h-4 w-4" />
+          Built for the next wave of independent music
+        </div>
+      </section>
+
+      <section className="relative border-y border-white/10 bg-black/25">
+        <div className="mx-auto grid max-w-7xl md:grid-cols-3">
+          {features.map(({ icon: Icon, label, title, copy }, index) => (
+            <article
+              key={label}
+              className={`group p-8 md:p-10 lg:p-12 ${
+                index !== features.length - 1 ? 'border-b border-white/10 md:border-b-0 md:border-r' : ''
+              }`}
+            >
+              <div className="mb-12 flex items-center justify-between">
+                <span className="text-xs uppercase tracking-[0.25em] text-white/40">
+                  0{index + 1} / {label}
+                </span>
+                <Icon className="h-5 w-5 text-white/50 transition group-hover:text-white" />
+              </div>
+              <h2 className="title max-w-xs text-2xl leading-tight">{title}</h2>
+              <p className="mt-4 max-w-sm text-sm leading-6 text-white/50">{copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="relative mx-auto grid max-w-7xl gap-12 px-6 py-24 md:px-10 lg:grid-cols-2 lg:py-32">
+        <div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-orange-300/25 bg-orange-300/10">
+            <Bitcoin className="h-5 w-5 text-orange-200" />
+          </div>
+          <h2 className="title mt-8 max-w-xl text-4xl leading-tight md:text-6xl">
+            The track is more than a stream.
+          </h2>
+        </div>
+        <div className="flex max-w-xl flex-col justify-end">
+          <p className="text-lg leading-8 text-white/55">
+            SUMAK gives every release a place to be heard, seen, and collected.
+            Music remains at the center; ownership adds a closer connection
+            between artist and audience.
+          </p>
+          <Link
+            href="/player"
+            className="mt-8 inline-flex w-fit items-center gap-2 border-b border-white/35 pb-1 text-sm font-medium transition hover:border-white"
+          >
+            Start listening <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
+      <footer className="relative border-t border-white/10 px-6 py-8 md:px-10">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 text-xs uppercase tracking-[0.2em] text-white/35">
+          <span>SUMAK</span>
+          <span>Sounds &amp; sats</span>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -6,10 +6,26 @@
 export const IPFS_GATEWAYS = [
   'https://ipfs.io/ipfs/',
   'https://gateway.ipfs.io/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
   'https://dweb.link/ipfs/',
-  'https://ipfs.io/ipfs/',
+  'https://nftstorage.link/ipfs/',
+  'https://w3s.link/ipfs/',
 ] as const;
+
+const PINATA_GATEWAY_REGEX = /^https?:\/\/(?:[a-z0-9-]+\.)*gateway\.pinata\.cloud\/ipfs\//i;
+
+/**
+ * Prefiere el gateway público de ipfs.io cada vez que detectamos gateway.pinata.cloud
+ * para evitar throttling 429 de Pinata.
+ */
+export function preferIpfsGateway(url?: string | null): string | null {
+  if (!url) return url ?? null;
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (PINATA_GATEWAY_REGEX.test(trimmed)) {
+    return trimmed.replace(PINATA_GATEWAY_REGEX, 'https://ipfs.io/ipfs/');
+  }
+  return trimmed;
+}
 
 /**
  * Extrae el hash IPFS de cualquier URL IPFS

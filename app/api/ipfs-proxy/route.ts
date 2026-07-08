@@ -13,10 +13,10 @@ export async function GET(request: NextRequest) {
   const gateways = [
     'https://ipfs.io/ipfs/',
     'https://gateway.ipfs.io/ipfs/',
-    'https://cloudflare-ipfs.com/ipfs/',
     'https://dweb.link/ipfs/',
     'https://gateway.pinata.cloud/ipfs/',
-    'https://nftstorage.link/ipfs/'
+    'https://nftstorage.link/ipfs/',
+    'https://w3s.link/ipfs/'
   ];
 
   // Headers for maximum compatibility

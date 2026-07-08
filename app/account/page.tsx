@@ -116,7 +116,7 @@ export default function AccountCreatedPage() {
           <Check className="w-16 h-16 text-foreground" />
         </div>
         <h2 className="text-2xl font-bold text-center mb-4 text-white">Your Account Has Been Created</h2>
-        <div className="mb-4">
+        <div className="my-4">
           <div className="relative">
             <div className="bg-[#181818] p-6 rounded">
               <div className="grid grid-cols-3 gap-3">
@@ -135,13 +135,13 @@ export default function AccountCreatedPage() {
                 ))}
               </div>
             </div>
-            <div className="absolute top-4 right-4 flex gap-2">
+            <div className="absolute -top-4 right-4 flex gap-2">
               <button
                 onClick={handleCopyAll}
                 className="p-2 bg-[#222] hover:bg-[#333] rounded-lg border border-[#111] transition-colors cursor-pointer"
                 aria-label="Copy all words"
               >
-                <Copy className={`w-5 h-5 ${copied ? 'text-green-500' : 'text-white'}`} />
+                <Copy className={`w-4 h-4 ${copied ? 'text-green-500' : 'text-white'}`} />
               </button>
               <button
                 onClick={() => setShowMnemonic(!showMnemonic)}
@@ -149,16 +149,16 @@ export default function AccountCreatedPage() {
                 aria-label={showMnemonic ? "Hide mnemonic" : "Show mnemonic"}
               >
                 {showMnemonic ? (
-                  <EyeOff className="w-5 h-5 text-white" />
+                  <EyeOff className="w-4 h-4 text-white" />
                 ) : (
-                  <Eye className="w-5 h-5 text-white" />
+                  <Eye className="w-4 h-4 text-white" />
                 )}
               </button>
             </div>
           </div>
         </div>
-        <div className="mb-4 text-xl bg-white text-black text-center p-4 py-8 rounded-lg flex items-center justify-center gap-3">
-          <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+        <div className="mb-4 text-xl bg-red-500 text-white text-center p-4 py-8 rounded-lg flex items-center justify-center gap-3">
+          <AlertTriangle className="w-6 h-6 text-white flex-shrink-0" />
           <div>
             <b>This is your mnemonic.</b> You will need it to recover your account. We cannot recover your access if you lose it.
           </div>

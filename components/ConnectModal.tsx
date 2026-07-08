@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { request as satsRequest } from 'sats-connect';
-import { useWallet } from './WalletProvider';
+import { useWallet, type WalletType } from './WalletProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { X, Wallet, Mail, Key } from 'lucide-react';
@@ -9,7 +9,8 @@ import { validateAndGenerateWallet } from '@/lib/walletHelpers';
 import { detectWalletExtensions } from '@/lib/detectWalletExtensions';
 import { useEncryptedWallet } from './EncryptedWalletProvider';
 import { useRouter } from 'next/navigation';
-import { upsertConnectedAccountPasskey, getConnectedAccountByEmail, getConnectedAccountPasskeyByAddress } from '@/lib/connectedAccountsApi';
+import { storeEncryptedAccount, getConnectedAccountByEmail, getConnectedAccountPasskeyByAddress, getConnectedAccountByAddress } from '@/lib/connectedAccountsApi';
+import { decryptPortableEncryptedWallet, createPortableEncryptedWallet } from '@/lib/encryptedStorage';
 // Password verification utility for settings changes
 // Usage: await verifyPassphraseForSettings(address, passphrase, privateKey)
 export async function verifyPassphraseForSettings(address: string, passphrase: string, privateKey: string): Promise<boolean> {
@@ -26,6 +27,8 @@ export async function verifyPassphraseForSettings(address: string, passphrase: s
   }
 }
 import CryptoJS from 'crypto-js';
+import type { UniversalConnector } from '@reown/appkit-universal-connector';
+import { getWalletConnectConnector, extractWalletConnectStacksAddress } from '@/lib/walletConnect';
 
 declare global {
   interface Window {
@@ -47,6 +50,20 @@ interface ConnectModalProps {
 
 type ConnectMode = 'wallets' | 'email' | 'mnemonic';
 
+interface EmailAccountPayload {
+  account: {
+    email: string;
+    address: string;
+    passkey: string;
+    encryptedPrivateKey: string;
+    encryptedMnemonic: string;
+    encryptionSalt: string;
+    encryptionIv: string;
+    encryptionVersion?: string;
+    walletLabel?: string;
+  };
+}
+
 // Destructure props at the top of your component
 export default function ConnectModal({ onClose, onSuccess, onError }: ConnectModalProps) {
   const [connectMode, setConnectMode] = useState<ConnectMode>('wallets');
@@ -56,21 +73,129 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
   }, []);
   const [mnemonic, setMnemonic] = useState('');
   const [email, setEmail] = useState('');
-  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [mnemonicEmail, setMnemonicEmail] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [emailMessage, setEmailMessage] = useState('');
+  const [password, setPassword] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [confirmPassphrase, setConfirmPassphrase] = useState('');
   const [walletLabel, setWalletLabel] = useState('');
-  const { setAddress } = useWallet();
+  const { setAddress, setWalletType } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'import' | 'encrypt'>('import');
+  const [existingAddressAccount, setExistingAddressAccount] = useState<{ address: string; email?: string | null } | null>(null);
+  const [addressNotice, setAddressNotice] = useState<string | null>(null);
+  const walletConnectConnectorRef = useRef<UniversalConnector | null>(null);
+  const [walletConnectReady, setWalletConnectReady] = useState(false);
+  const [walletConnectLoading, setWalletConnectLoading] = useState(false);
+  const [walletConnectError, setWalletConnectError] = useState<string | null>(null);
 
   const { createEncryptedWallet } = useEncryptedWallet();
   const router = useRouter();
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const initWalletConnect = async () => {
+      try {
+        const connector = await getWalletConnectConnector();
+        if (cancelled) return;
+        walletConnectConnectorRef.current = connector;
+        setWalletConnectReady(true);
+        setWalletConnectError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'WalletConnect is unavailable';
+        setWalletConnectError(message);
+        setWalletConnectReady(false);
+      }
+    };
+
+    initWalletConnect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistSessionForWallet = useCallback(async (connectedAddress: string, providerType: WalletType) => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const existingAccount = await getConnectedAccountByAddress(connectedAddress);
+      const sessionPayload = {
+        address: connectedAddress,
+        walletType: providerType,
+        provider: providerType,
+        connectedAt: Date.now(),
+        existingAccount: Boolean(existingAccount),
+        email: existingAccount?.email ?? null,
+        accountId: existingAccount?.id ?? null,
+      };
+      localStorage.setItem('sumak_session', JSON.stringify(sessionPayload));
+      window.dispatchEvent(new Event('bbox-session-update'));
+    } catch (error) {
+      console.warn('Failed to fetch connected account info, storing minimal session.', error);
+      const fallbackPayload = {
+        address: connectedAddress,
+        walletType: providerType,
+        provider: providerType,
+        connectedAt: Date.now(),
+      };
+      localStorage.setItem('sumak_session', JSON.stringify(fallbackPayload));
+      window.dispatchEvent(new Event('bbox-session-update'));
+    }
+  }, []);
+
+  const handleWalletConnect = useCallback(async () => {
+    if (!walletConnectConnectorRef.current) {
+      setWalletConnectError('WalletConnect is not configured. Add NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.');
+      return;
+    }
+
+    try {
+      setWalletConnectLoading(true);
+      setWalletConnectError(null);
+      const { session } = await walletConnectConnectorRef.current.connect();
+      const addressFromSession = extractWalletConnectStacksAddress(session);
+      if (!addressFromSession) {
+        throw new Error('WalletConnect session did not provide a Stacks address');
+      }
+
+      setAddress(addressFromSession);
+      setWalletType('walletconnect');
+      await persistSessionForWallet(addressFromSession, 'walletconnect');
+
+      onSuccess?.();
+      onClose();
+      router.push(`/${addressFromSession}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to connect via WalletConnect';
+      setWalletConnectError(message);
+      onError?.(message);
+    } finally {
+      setWalletConnectLoading(false);
+    }
+  }, [router, onClose, onSuccess, onError, persistSessionForWallet, setAddress, setWalletType]);
+
   const handleMnemonicImport = async () => {
-    if (!mnemonic.trim()) {
+    const normalizedMnemonic = mnemonic.trim().replace(/\s+/g, ' ');
+    if (!normalizedMnemonic) {
       setError('Please enter your mnemonic phrase');
       onError?.('Please enter your mnemonic phrase');
       return;
@@ -79,9 +204,11 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
     try {
       setIsLoading(true);
       setError(null);
+      setExistingAddressAccount(null);
+      setAddressNotice(null);
 
       // Validate mnemonic and generate wallet
-      const { privateKey, address } = await validateAndGenerateWallet(mnemonic.trim());
+      const { privateKey, address } = await validateAndGenerateWallet(normalizedMnemonic);
       
       if (!privateKey || !address) {
         setError('Invalid mnemonic phrase');
@@ -92,11 +219,28 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
 
       // Store temporary data for encryption step
       window.tempImportData = {
-        mnemonic: mnemonic.trim(),
+        mnemonic: normalizedMnemonic,
         privateKey,
         address,
         label: walletLabel
       };
+
+      try {
+        const existingAccount = await getConnectedAccountByAddress(address);
+        if (existingAccount) {
+          setExistingAddressAccount({ address, email: existingAccount.email ?? null });
+          setAddressNotice('This mainnet address already exists in BBOX. Enter a new password below to re-encrypt it and rotate your passkey.');
+          if (existingAccount.email) {
+            setMnemonicEmail(existingAccount.email);
+          }
+        } else {
+          setExistingAddressAccount(null);
+          setAddressNotice(null);
+          setMnemonicEmail('');
+        }
+      } catch (lookupError) {
+        console.warn('Failed to look up connected account by address:', lookupError);
+      }
 
       setStep('encrypt');
     } catch (err) {
@@ -124,6 +268,18 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
       return;
     }
 
+    const normalizedEmail = mnemonicEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Email is required to enable email login');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -133,22 +289,19 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
         throw new Error('Import data not found');
       }
 
-      // Check if email is already registered in connected_accounts
-      if (email) {
-        const existingAccount = await getConnectedAccountByEmail(email);
-        if (existingAccount) {
-          // Email already registered: send connection link and show alert
-          setIsLoading(false);
-          setError('Email is already registered. A connection link has been sent to your email.');
-          try {
-            await fetch('/api/wallet-recovery/send-link', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: email.trim() }),
-            });
-          } catch {}
-          return;
-        }
+      // Check if email is already registered
+      const existingEmailAccount = await getConnectedAccountByEmail(normalizedEmail);
+      if (existingEmailAccount && existingEmailAccount.address !== tempData.address) {
+        setIsLoading(false);
+        setError('Email is already registered. A connection link has been sent to your email.');
+        try {
+          await fetch('/api/wallet-connect/send-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail }),
+          });
+        } catch {}
+        return;
       }
 
       const walletData = {
@@ -159,20 +312,33 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
       };
 
       await createEncryptedWallet(walletData, passphrase);
+      setAddress(walletData.address);
+      setWalletType('imported');
+      await persistSessionForWallet(walletData.address, 'imported');
 
-      // Update connected_accounts: remove previous passkey and insert new one (hash of privateKey + passphrase)
+      const passkeyHash = CryptoJS.SHA256(walletData.privateKey + passphrase).toString();
+      const portableWallet = createPortableEncryptedWallet(walletData, passphrase);
+
       try {
-        const passkeyHash = CryptoJS.SHA256(walletData.privateKey + passphrase).toString();
-        await upsertConnectedAccountPasskey(walletData.address, passkeyHash);
-      } catch (e) {
-        console.warn('Failed to update connected_accounts passkey:', e);
+        await storeEncryptedAccount({
+          email: normalizedEmail,
+          address: walletData.address,
+          passkeyHash,
+          walletLabel: walletData.label,
+          portableWallet,
+        });
+      } catch (syncError) {
+        console.error('Failed to store encrypted wallet remotely:', syncError);
+        throw new Error('Failed to sync wallet for email login. Please try again.');
       }
       
       // Clean up temp data
       delete window.tempImportData;
+      setExistingAddressAccount(null);
+      setAddressNotice(null);
 
       // Redirect to welcome page with email if available
-      const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
+      const emailParam = normalizedEmail ? `?email=${encodeURIComponent(normalizedEmail)}` : '';
       router.push(`/welcome${emailParam}`);
       
       if (onSuccess) onSuccess();
@@ -185,7 +351,8 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
   };
 
   const handleEmailConnect = async () => {
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
       setEmailStatus('error');
       setEmailMessage('Please enter your email address');
       onError?.('Please enter your email address');
@@ -193,41 +360,83 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(trimmedEmail)) {
       setEmailStatus('error');
       setEmailMessage('Please enter a valid email address');
       onError?.('Please enter a valid email address');
       return;
     }
 
+    if (!password) {
+      setEmailStatus('error');
+      setEmailMessage('Please enter your password');
+      onError?.('Please enter your password');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      setEmailStatus('sending');
+      setEmailStatus('loading');
       setEmailMessage('');
 
-      const response = await fetch('/api/wallet-recovery/send-link', {
+      const normalizedEmail = trimmedEmail.toLowerCase();
+
+      const response = await fetch('/api/wallet-connect/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
-      const data = await response.json();
+      const payload = await response.json();
 
-      if (!response.ok) {
-        setEmailStatus('error');
-        setEmailMessage(data.error || 'Failed to send connection link');
-        onError?.(data.error || 'Failed to send connection link');
-        setIsLoading(false);
-        return;
+      if (!response.ok || !payload?.account) {
+        const message =
+          payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+            ? payload.error
+            : 'Failed to authenticate account';
+        throw new Error(message);
       }
 
-      setEmailStatus('sent');
-      setEmailMessage('Connection link sent! Please check your email.');
+      const account = (payload as EmailAccountPayload).account;
+
+      const walletPayload = {
+        encryptedMnemonic: account.encryptedMnemonic,
+        encryptedPrivateKey: account.encryptedPrivateKey,
+        address: account.address,
+        label: account.walletLabel || 'BBOX Wallet',
+        salt: account.encryptionSalt,
+        iv: account.encryptionIv,
+        version: account.encryptionVersion,
+      };
+
+      let decryptedWallet;
+      try {
+        decryptedWallet = decryptPortableEncryptedWallet(walletPayload, password);
+      } catch {
+        throw new Error('Invalid email or password');
+      }
+
+      const passkeyHash = CryptoJS.SHA256(decryptedWallet.privateKey + password).toString();
+      if (passkeyHash !== account.passkey) {
+        throw new Error('Invalid email or password');
+      }
+
+      await createEncryptedWallet(decryptedWallet, password);
+      setAddress(decryptedWallet.address);
+      setWalletType('imported');
+      await persistSessionForWallet(decryptedWallet.address, 'imported');
+
+      setPassword('');
+      setEmailStatus('success');
+      setEmailMessage('Wallet unlocked. Redirecting...');
+      onSuccess?.();
+      onClose();
+      router.push(`/${decryptedWallet.address}`);
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to authenticate account';
       setEmailStatus('error');
-      const msg = (err as Error).message || 'Failed to send email.';
       setEmailMessage(msg);
       onError?.(msg);
     } finally {
@@ -261,6 +470,28 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                   You don&apos;t have unknown wallets in your browser that support this app. You need to install a wallet to proceed.
                 </div>
               )}
+              <div className="rounded-lg border border-gray-200 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-gray-900">WalletConnect</div>
+                  <div className="text-xs text-gray-500">Use any compatible mobile or desktop wallet.</div>
+                </div>
+                <Button
+                  className="bg-black text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer disabled:cursor-not-allowed"
+                  onClick={handleWalletConnect}
+                  disabled={!walletConnectReady || walletConnectLoading}
+                >
+                  {walletConnectLoading
+                    ? 'Connecting...'
+                    : walletConnectReady
+                      ? 'Connect'
+                      : walletConnectError
+                        ? 'Unavailable'
+                        : 'Loading...'}
+                </Button>
+              </div>
+              {walletConnectError && (
+                <p className="text-xs text-red-500 mt-2">{walletConnectError}</p>
+              )}
               <div className="space-y-3">
                 {wallets.map(w => (
                   <div key={w.id} className="flex items-center justify-between rounded-lg px-4 py-3">
@@ -280,12 +511,10 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     </div>
                     {w.installed ? (
                       <Button
-                        className="bg-black hover:bg-[#333] text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer"
                         onClick={async () => {
-                          console.log('Connect button clicked:', w);
                           try {
                             if (w.id === 'leather' && window.LeatherProvider) {
-                              console.log('LeatherProvider found:', window.LeatherProvider);
                               const provider = window.LeatherProvider;
                               if (
                                 provider &&
@@ -295,13 +524,13 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                               ) {
                                 // Use the latest Leather API: getAddresses
                                 const response = await (provider as { request: (method: string, params?: unknown) => Promise<unknown> }).request('getAddresses');
-                                console.log('Leather getAddresses response:', response);
                                 const stxAddress = Array.isArray((response as { result?: { addresses?: { symbol: string; address: string }[] } })?.result?.addresses)
                                   ? ((response as { result: { addresses: { symbol: string; address: string }[] } }).result.addresses.find(addr => addr.symbol === 'STX')?.address)
                                   : undefined;
                                 if (stxAddress) {
-                                  console.log('Leather connect success, STX address:', stxAddress);
                                   setAddress(stxAddress);
+                                  setWalletType('leather');
+                                  await persistSessionForWallet(stxAddress, 'leather');
                                   onSuccess?.();
                                   onClose();
                                   router.push(`/${stxAddress}`);
@@ -326,6 +555,8 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                                   const stxAddress = stacksAddressItem?.address;
                                   if (stxAddress) {
                                     setAddress(stxAddress);
+                                    setWalletType('xverse');
+                                    await persistSessionForWallet(stxAddress, 'xverse');
                                     onSuccess?.();
                                     onClose();
                                     router.push(`/${stxAddress}`);
@@ -428,15 +659,25 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email address"
-                    className="bg-white border border-gray-300 text-gray-900 cursor-pointer"
+                    className="bg-white text-black focus:bg-white ring-0 border border-border cursor-pointer"
+                  />
+              </div>
+              <div>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your wallet password"
+                    className="bg-white text-black focus:bg-white ring-0 border border-border cursor-pointer"
                   />
               </div>
               <Button 
                 onClick={handleEmailConnect} 
-                disabled={!email || isLoading} 
+                disabled={!email || !password || isLoading} 
                 className="w-full cursor-pointer bg-foreground text-background hover:bg-foreground hover:text-black transition-colors border border-[#555]"
               >
-                {isLoading ? 'Sending...' : 'Send Connection Link'}
+                {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
               {emailMessage && (
                 <div style={{ color: emailStatus === 'error' ? 'red' : 'green', marginTop: 8 }} className="text-sm">
@@ -452,7 +693,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     value={walletLabel}
                     onChange={(e) => setWalletLabel(e.target.value)}
                     placeholder="Wallet Label"
-                    className="bg-white border border-gray-300 text-gray-900"
+                    className="bg-white text-black border border-border"
                   />
               </div>
               <div>
@@ -460,7 +701,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                   value={mnemonic}
                   onChange={(e) => setMnemonic(e.target.value)}
                   placeholder="Enter your 12 or 24 word mnemonic phrase..."
-                  className="w-full h-32 p-3 bg-white border border-gray-300 rounded-md text-gray-900 placeholder-gray-400 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full h-32 p-3 bg-white text-black border border-border rounded-md placeholder-gray-400 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   Separate words with spaces. Your mnemonic will be encrypted and stored securely.
@@ -490,6 +731,31 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                   Create a passphrase to encrypt your wallet. This will be required to access your wallet.
                 </p>
               </div>
+              {addressNotice && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm p-3">
+                  <p>{addressNotice}</p>
+                  {existingAddressAccount?.email && (
+                    <p className="mt-1 text-xs opacity-80">
+                      Registered email: {existingAddressAccount.email}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs font-mono break-all">
+                    {existingAddressAccount?.address}
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email (required for email login)
+                </label>
+                  <Input
+                    type="email"
+                    value={mnemonicEmail}
+                    onChange={(e) => setMnemonicEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="bg-white text-black border border-border"
+                  />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Passphrase
@@ -499,7 +765,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
                     placeholder="Enter a secure passphrase"
-                    className="bg-white border border-gray-300 text-gray-900"
+                    className="bg-white text-black border border-border"
                   />
               </div>
               <div>
@@ -511,7 +777,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                     value={confirmPassphrase}
                     onChange={(e) => setConfirmPassphrase(e.target.value)}
                     placeholder="Confirm your passphrase"
-                    className="bg-white border border-gray-300 text-gray-900"
+                    className="bg-white text-black border border-border"
                   />
               </div>
               {error && (
@@ -522,7 +788,11 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
               <div className="flex gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => setStep('import')}
+                  onClick={() => {
+                    setStep('import');
+                    setExistingAddressAccount(null);
+                    setAddressNotice(null);
+                  }}
                   className="flex-1 cursor-pointer hover:bg-gray-100 hover:text-gray-900 transition-colors"
                   disabled={isLoading}
                 >

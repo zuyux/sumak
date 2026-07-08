@@ -5,8 +5,40 @@ const ALLOWED_HOSTS = [
   'ipfs.io',
   'cloudflare-ipfs.com',
   'dweb.link',
+  'gateway.ipfs.io',
   'ipfs.infura.io',
+  'nftstorage.link',
+  'w3s.link',
 ];
+
+const IPFS_PATH_REGEX = /\/ipfs\/([^/?#]+)/i;
+const IPFS_GATEWAY_FALLBACKS = [
+  'https://ipfs.io/ipfs/',
+  'https://dweb.link/ipfs/',
+  'https://gateway.pinata.cloud/ipfs/',
+  'https://gateway.ipfs.io/ipfs/',
+  'https://nftstorage.link/ipfs/',
+  'https://w3s.link/ipfs/',
+];
+
+function buildCandidateUrls(target: URL): string[] {
+  const candidates = [target.toString()];
+  const match = target.pathname.match(IPFS_PATH_REGEX);
+
+  if (!match?.[1]) {
+    return candidates;
+  }
+
+  const cid = match[1];
+  for (const gateway of IPFS_GATEWAY_FALLBACKS) {
+    const candidate = `${gateway}${cid}${target.search}`;
+    if (!candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  }
+
+  return candidates;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { url } = req.query;
@@ -34,21 +66,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.headers.range) {
       headers.Range = String(req.headers.range);
     }
-    const upstream = await fetch(target.toString(), { headers });
-    if (!upstream.ok) {
-      res.status(upstream.status).send(`Upstream fetch failed: ${upstream.statusText}`);
-      return;
+    let lastFailure: string | null = null;
+
+    for (const candidate of buildCandidateUrls(target)) {
+      try {
+        const upstream = await fetch(candidate, {
+          headers,
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (!upstream.ok) {
+          lastFailure = `Upstream fetch failed: ${upstream.status} ${upstream.statusText}`;
+          continue;
+        }
+
+        const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+        const cacheControl = upstream.headers.get('cache-control');
+        const contentLength = upstream.headers.get('content-length');
+        const contentRange = upstream.headers.get('content-range');
+        const acceptRanges = upstream.headers.get('accept-ranges');
+
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', contentType);
+
+        if (cacheControl) {
+          res.setHeader('Cache-Control', cacheControl);
+        }
+        if (contentLength) {
+          res.setHeader('Content-Length', contentLength);
+        }
+        if (contentRange) {
+          res.setHeader('Content-Range', contentRange);
+        }
+        if (acceptRanges) {
+          res.setHeader('Accept-Ranges', acceptRanges);
+        }
+
+        const buffer = await upstream.arrayBuffer();
+        res.status(upstream.status).send(Buffer.from(buffer));
+        return;
+      } catch (error) {
+        lastFailure = error instanceof Error ? error.message : 'Unknown proxy fetch error';
+      }
     }
 
-    // Stream the response body back with CORS header
-    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', contentType);
-
-    const buffer = await upstream.arrayBuffer();
-    const buf = Buffer.from(buffer);
-    // Propagate upstream status (useful for 206 Partial Content when ranges are used)
-    res.status(upstream.status).send(buf);
+    console.error('Proxy exhausted IPFS candidates for', url, lastFailure);
+    res.status(502).send(lastFailure ?? 'Proxy fetch error');
   } catch (error) {
     console.error('Proxy error fetching', url, error);
     res.status(500).send('Proxy fetch error');

@@ -33,7 +33,8 @@ export default function PersistentPlayer() {
 
   const [imageError, setImageError] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
+  const [coverImageLoading, setCoverImageLoading] = useState(true);
+  const [modalImageLoading, setModalImageLoading] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
 
     const isMobile = useIsMobile();
@@ -41,23 +42,35 @@ export default function PersistentPlayer() {
   // Reset image error when album changes
   useEffect(() => {
     setImageError(false);
-    setImageLoading(true);
+    setCoverImageLoading(true);
+    setModalImageLoading(false);
   }, [currentAlbum?.metadata?.image]);
 
   const handleImageError = () => {
     setImageError(true);
-    setImageLoading(false);
+    setCoverImageLoading(false);
+    setModalImageLoading(false);
   };
 
-  const handleImageLoad = () => {
+  const handleCoverImageLoad = () => {
     setImageError(false);
-    setImageLoading(false);
+    setCoverImageLoading(false);
+  };
+
+  const handleModalImageLoad = () => {
+    setImageError(false);
+    setModalImageLoading(false);
   };
   
   const openImageModal = useCallback((e?: React.SyntheticEvent) => {
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    setImageLoading(true);
+    setModalImageLoading(true);
     setShowImageModal(true);
+  }, []);
+
+  const closeImageModal = useCallback(() => {
+    setShowImageModal(false);
+    setModalImageLoading(false);
   }, []);
   const [localVolume, setLocalVolume] = useState(volume);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -176,6 +189,13 @@ export default function PersistentPlayer() {
     const newTime = (clickX / rect.width) * duration;
     seekTo(newTime);
   };
+
+  const timelineDuration = Number.isFinite(duration) && duration > 0
+    ? duration
+    : (currentAlbum?.metadata?.properties?.duration ?? 0);
+  const progressPercentage = timelineDuration > 0
+    ? Math.min(Math.max((currentTime / timelineDuration) * 100, 0), 100)
+    : 0;
   // Handle volume change
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
@@ -275,8 +295,8 @@ export default function PersistentPlayer() {
             className="cursor-pointer w-full h-full object-cover"
             onClick={openImageModal}
             onError={handleImageError}
-            onLoad={handleImageLoad}
-            style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 240ms ease' }}
+            onLoad={handleCoverImageLoad}
+            style={{ opacity: coverImageLoading ? 0 : 1, transition: 'opacity 240ms ease' }}
           />
         </div>
       </div>
@@ -308,24 +328,14 @@ export default function PersistentPlayer() {
 
   return (
     <>
-      {/* Mobile: Title & Artist above persistent player */}
-      {isMobile && !isExpanded && (
-      <div className="fixed bottom-20 left-0 right-0 z-50 flex flex-col items-center justify-center bg-black/10 backdrop-blur py-2 px-4" style={{ fontFamily: 'Chakra Petch, var(--font-chakra-petch), sans-serif' }}>
-          <span className="text-base font-bold title text-center truncate w-full" title={getTitle(currentAlbum.metadata)}>
-            {getTitle(currentAlbum.metadata)}
-          </span>
-          <span className="text-xs font-medium title text-center text-white/50 truncate w-full" title={getArtist(currentAlbum.metadata)}>
-            {getArtist(currentAlbum.metadata)}
-          </span>
-        </div>
-      )}
+
         {floatingCover}
 
         {/* Fullscreen image modal */}
         {showImageModal && (
           <div
             className="fixed inset-0 z-60 flex items-center justify-center bg-black/80"
-            onClick={() => setShowImageModal(false)}
+            onClick={closeImageModal}
           >
             <div className="relative w-screen h-screen">
               <div className="relative w-full h-full">
@@ -335,11 +345,11 @@ export default function PersistentPlayer() {
                   fill
                   priority
                   className="object-contain w-full h-full"
-                  onLoad={handleImageLoad}
+                  onLoad={handleModalImageLoad}
                   onError={handleImageError}
                 />
               </div>
-              {imageLoading && (
+              {modalImageLoading && (
                 <div className="absolute inset-0 z-70 flex items-center justify-center pointer-events-none">
                   <div className="cover-spinner" role="status" aria-live="polite">
                     <span className="sr-only">Loading cover</span>
@@ -348,7 +358,7 @@ export default function PersistentPlayer() {
               )}
 
               <button
-                onClick={(e) => { e.stopPropagation(); setShowImageModal(false); }}
+                onClick={(e) => { e.stopPropagation(); closeImageModal(); }}
                 className="cursor-pointer absolute top-4 right-4 bg-black bg-opacity-60 text-white p-2 rounded z-80"
                 aria-label="Close image"
               >
@@ -366,9 +376,9 @@ export default function PersistentPlayer() {
       WebkitBackdropFilter: 'blur(40px) saturate(180%)'
     }}
   >
-    {/* Top timeline spanning full width of the player (kept outside the collapsing inner area so it's always visible) */}
+    {/* Top timeline spanning the full viewport width */}
     <div
-      className="player-timeline-wrapper"
+      className="player-timeline-wrapper h-1 bg-background/10 w-full"
       onClick={handleTimelineClick}
       role="slider"
       aria-label="Seek timeline"
@@ -378,7 +388,7 @@ export default function PersistentPlayer() {
     >
       <div
         className="player-timeline-fill"
-        style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+        style={{ width: `${progressPercentage}%` }}
       />
     </div>
     <div ref={innerRef} className="persistent-player-inner">
@@ -393,45 +403,46 @@ export default function PersistentPlayer() {
             onClick={navigateToCurrentNFT}
             title="View NFT details"
           >
-            <div className={`cover-hover-wrapper relative flex-shrink-0 transition-all duration-300 ${isTransitioning ? 'ring-2 ring-primary/50' : ''}`}>
-              <div className={`cover-scale w-20 h-20 relative rounded overflow-hidden`}>
-                {imageLoading && (
-                  <Skeleton className="absolute inset-0 w-full h-full z-10" />
-                )}
-                {currentAlbum?.metadata?.image ? (
-                  <Image
-                    src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
-                    alt={getTitle(currentAlbum.metadata)}
-                    fill
-                    sizes="80px"
-                    priority
-                    className="object-cover"
-                    onError={handleImageError}
-                    onLoad={handleImageLoad}
-                    style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
+            {!isMobile && (
+              <div className={`cover-hover-wrapper relative flex-shrink-0 transition-all duration-300 ${isTransitioning ? 'ring-2 ring-primary/50' : ''}`}>
+                <div className={`cover-scale w-20 h-20 relative rounded overflow-hidden`}>
+                  {coverImageLoading && (
+                    <Skeleton className="absolute inset-0 w-full h-full z-10" />
+                  )}
+                  {currentAlbum?.metadata?.image ? (
+                    <Image
+                      src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
+                      alt={getTitle(currentAlbum.metadata)}
+                      fill
+                      sizes="80px"
+                      priority
+                      className="object-cover"
+                      onError={handleImageError}
+                      onLoad={handleCoverImageLoad}
+                      style={{ opacity: coverImageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
+                    />
+                  ) : (
+                    <Image
+                      src="/SUMAK.png"
+                      alt="SUMAK Default"
+                      fill
+                      sizes="80px"
+                      priority
+                      className="object-cover"
+                      onLoad={handleCoverImageLoad}
+                      style={{ opacity: coverImageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
+                    />
+                  )}
+                  {/* Make the cover itself clickable to open the fullscreen modal */}
+                  <div
+                    onClick={openImageModal}
+                    role="button"
+                    aria-label="Open cover fullscreen"
+                    className="absolute inset-0 z-30"
                   />
-                ) : (
-                  <Image
-                    src="/SUMAK.png"
-                    alt="SUMAK Default"
-                    fill
-                    sizes="80px"
-                    priority
-                    className="object-cover"
-                    onLoad={handleImageLoad}
-                    style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
-                  />
-                )}
-                {/* Make the cover itself clickable to open the fullscreen modal */}
-                <div
-                  onClick={openImageModal}
-                  role="button"
-                  aria-label="Open cover fullscreen"
-                  className="absolute inset-0 z-30"
-                />
+                </div>
               </div>
-
-            </div>
+            )}
             <div className="min-w-0 flex-1 flex flex-col justify-center">
               <div className="hidden md:block">
                 <p
@@ -544,35 +555,37 @@ export default function PersistentPlayer() {
             onClick={navigateToCurrentNFT}
             title="View NFT details"
           >
-            <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
-              {imageLoading && (
-                <Skeleton className="absolute inset-0 w-full h-full z-10" />
-              )}
-              <Image
-                src={currentAlbum.metadata.image}
-                alt={getTitle(currentAlbum.metadata)}
-                fill
-                className="object-cover"
-                sizes="64px"
-                priority
-                style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
-                onError={(e) => {
-                  // Silently handle image loading errors (often due to IPFS gateway timeouts)
-                  const img = e.target as HTMLImageElement;
-                  if (img.src.includes('gateway.pinata.cloud')) {
-                    // Try fallback to ipfs.io gateway
-                    const ipfsHash = img.src.split('/ipfs/')[1];
-                    if (ipfsHash) {
-                      img.src = `https://ipfs.io/ipfs/${ipfsHash}`;
+            {!isMobile && (
+              <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
+                {coverImageLoading && (
+                  <Skeleton className="absolute inset-0 w-full h-full z-10" />
+                )}
+                <Image
+                  src={currentAlbum.metadata.image}
+                  alt={getTitle(currentAlbum.metadata)}
+                  fill
+                  className="object-cover"
+                  sizes="64px"
+                  priority
+                  style={{ opacity: coverImageLoading ? 0 : 1, transition: 'opacity 220ms ease' }}
+                  onError={(e) => {
+                    // Silently handle image loading errors (often due to IPFS gateway timeouts)
+                    const img = e.target as HTMLImageElement;
+                    if (img.src.includes('gateway.pinata.cloud')) {
+                      // Try fallback to ipfs.io gateway
+                      const ipfsHash = img.src.split('/ipfs/')[1];
+                      if (ipfsHash) {
+                        img.src = `https://ipfs.io/ipfs/${ipfsHash}`;
+                      }
                     }
-                  }
-                  setImageLoading(false);
-                }}
-                onLoad={() => {
-                  setImageLoading(false);
-                }}
-              />
-            </div>
+                    setCoverImageLoading(false);
+                  }}
+                  onLoad={() => {
+                    setCoverImageLoading(false);
+                  }}
+                />
+              </div>
+            )}
             <div className="min-w-0 flex-1 flex flex-col justify-center">
               <>
                 <h4
@@ -983,22 +996,20 @@ export default function PersistentPlayer() {
 
         /* Player timeline at top border */
         .player-timeline-wrapper {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 8px;
+          position: relative;
+          width: 100%;
+          height: 4px;
           cursor: pointer;
-          background: rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.12);
           z-index: 96;
-          border-radius: 6px;
-          margin: 6px 8px 6px 8px;
+          border-radius: 0;
           overflow: hidden;
+          flex-shrink: 0;
         }
 
         .player-timeline-fill {
           height: 100%;
-          background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.6));
+          background: #ffffff;
           transition: width 120ms linear;
         }
 

@@ -9,7 +9,6 @@ import { CircleHelp, X, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { PasswordInput } from '@/components/PasswordInput';
 import ConnectModal from './ConnectModal';
-import { formatStxAddress } from '@/lib/address-utils';
 import { toast } from 'sonner';
 
 export default function GetInModal({ onClose }: { onClose?: () => void }) {
@@ -449,10 +448,15 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
                         localStorage.removeItem('walletAddress');
                         localStorage.removeItem('sumak_user_email'); // Email association
                         
-                        // Clear any wallet-specific encrypted storage (dynamic keys)
+                        // Clear any wallet-specific encrypted storage or other Sumak session keys
                         for (let i = localStorage.length - 1; i >= 0; i--) {
                           const key = localStorage.key(i);
-                          if (key && key.startsWith('encrypted_wallet_')) {
+                          if (!key) continue;
+
+                          const isEncryptedWalletKey = key.startsWith('encrypted_wallet_');
+                          const isSumakSessionKey = key.startsWith('sumak_');
+
+                          if (isEncryptedWalletKey || isSumakSessionKey) {
                             localStorage.removeItem(key);
                           }
                         }
@@ -494,11 +498,7 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
                   type="button"
                 >
                   <Shield className="w-[18px] h-[18px] mx-[5px]"/>
-                  <span className="text-center flex-1">
-                    {isWalletEncrypted && walletInfo 
-                      ? `Desbloquear ${formatStxAddress(walletInfo.address)}` 
-                      : 'Crear Cuenta'}
-                  </span>
+                  <span className="text-center flex-1">Crear Cuenta</span>
                 </Button>
               </div>
             </>
@@ -515,7 +515,6 @@ export default function GetInModal({ onClose }: { onClose?: () => void }) {
             }}
           />
         )}
-        {/* Mint button removed from this modal - use global AddMintButton in the navbar */}
         {/* Terms */}
         <div className="w-full rounded-b-2xl text-center text-xs text-foreground tracking-wider p-6 px-8">
           By Signing In, you agree to our <Link href="/terms" className="hover:text-accent-primary">Terms of Service</Link> and <Link href="/privacy" className="hover:text-accent-primary">Privacy Policy</Link>

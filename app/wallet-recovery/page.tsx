@@ -7,12 +7,17 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader, Key, AlertCircle, Timer, Shield } from 'lucide-react';
 import { useEncryptedWallet } from '@/components/EncryptedWalletProvider';
+import { useWallet } from '@/components/WalletProvider';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { mnemonicToSeed } from '@scure/bip39';
 import { HDKey } from '@scure/bip32';
 import { bytesToHex } from '@stacks/common';
 import { getAddressFromPrivateKey } from '@stacks/transactions';
+import CryptoJS from 'crypto-js';
+import { createPortableEncryptedWallet } from '@/lib/encryptedStorage';
+import { storeEncryptedAccount } from '@/lib/connectedAccountsApi';
+import { persistSumakSession } from '@/lib/sessionUtils';
 
 export default function WalletRecoveryPage() {
   const searchParams = useSearchParams();
@@ -34,6 +39,7 @@ export default function WalletRecoveryPage() {
   const [existingAddress, setExistingAddress] = useState('');
 
   const { isAuthenticated, createEncryptedWallet } = useEncryptedWallet();
+  const { setAddress, setWalletType } = useWallet();
 
   // Handle password update mode (existing user)
   useEffect(() => {
@@ -229,6 +235,36 @@ export default function WalletRecoveryPage() {
       
       // Create encrypted wallet with new password
       await createEncryptedWallet(walletData, passphrase);
+
+      try {
+        const normalizedEmail = email.trim().toLowerCase();
+        const passkeyHash = CryptoJS.SHA256(walletData.privateKey + passphrase).toString();
+        const portableWallet = createPortableEncryptedWallet(walletData, passphrase);
+        await storeEncryptedAccount({
+          email: normalizedEmail,
+          address: walletData.address,
+          passkeyHash,
+          walletLabel: walletData.label,
+          portableWallet,
+        });
+
+        setAddress(walletData.address);
+        setWalletType('imported');
+        persistSumakSession(walletData.address, {
+          walletType: 'imported',
+          provider: 'imported',
+          email: normalizedEmail,
+          label: walletData.label,
+          existingAccount: mode === 'update',
+        });
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sumak_user_email', normalizedEmail);
+        }
+      } catch (syncError) {
+        console.error('Failed to sync encrypted wallet:', syncError);
+        throw new Error('Failed to sync wallet for email login. Please try again.');
+      }
       
       // Clean up session storage
       if (mode === 'update') {

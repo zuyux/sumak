@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { preferIpfsGateway } from '@/lib/ipfs-utils';
 
 interface NFTMetadata {
   name: string;
@@ -110,7 +111,7 @@ const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 const IPFS_GATEWAY_FALLBACKS = [
   'https://ipfs.io/ipfs/',
   'https://gateway.pinata.cloud/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
+  'https://gateway.ipfs.io/ipfs/',
   'https://w3s.link/ipfs/',
   'https://nftstorage.link/ipfs/',
   'https://dweb.link/ipfs/'
@@ -165,8 +166,10 @@ const fetchNFTMusicData = async (): Promise<Album[]> => {
 
     // Convert NFT records to Album format
     const albums: Album[] = nfts.map((nft: NFTRecord) => {
-      const imageUrl = nft.image_url || (nft.image_cid ? `https://ipfs.io/ipfs/${nft.image_cid}` : '');
-      const audioUrl = nft.audio_url || (nft.audio_cid ? `https://ipfs.io/ipfs/${nft.audio_cid}` : '');
+      const rawImageUrl = nft.image_url || (nft.image_cid ? `https://ipfs.io/ipfs/${nft.image_cid}` : '');
+      const rawAudioUrl = nft.audio_url || (nft.audio_cid ? `https://ipfs.io/ipfs/${nft.audio_cid}` : '');
+      const imageUrl = preferIpfsGateway(rawImageUrl) || rawImageUrl;
+      const audioUrl = preferIpfsGateway(rawAudioUrl) || rawAudioUrl;
       
       // Ensure we have a valid image URL, provide fallback if needed
       const safeImageUrl = imageUrl || '/SUMAK.png'; // Use SUMAK logo as fallback
@@ -258,11 +261,14 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   // Utility function to convert any IPFS gateway URL or CID to ipfs.io
   const convertToIpfsIo = useCallback((url: string): string => {
     if (!url) return url;
-    // If it's already a valid https URL, use as-is
-    if (url.startsWith('https://')) return url;
+    const preferred = preferIpfsGateway(url) ?? url;
+    const trimmed = preferred.trim();
+    if (!trimmed) return trimmed;
+    // If it's already a valid https URL (possibly rewritten to ipfs.io), use as-is
+    if (trimmed.startsWith('https://')) return trimmed;
     // If it's a CID (46+ chars, alphanumeric), build the ipfs.io URL
-    if (/^[a-zA-Z0-9]{46,}$/.test(url)) {
-      return `https://ipfs.io/ipfs/${url}`;
+    if (/^[a-zA-Z0-9]{46,}$/.test(trimmed)) {
+      return `https://ipfs.io/ipfs/${trimmed}`;
     }
     // Match IPFS CID patterns in URLs
     const ipfsPatterns = [
@@ -271,7 +277,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       /\/([a-zA-Z0-9]{46,})$/     // Just the CID at the end
     ];
     for (const pattern of ipfsPatterns) {
-      const match = url.match(pattern);
+      const match = trimmed.match(pattern);
       if (match && match[1]) {
         const cid = match[1];
         const finalUrl = `https://ipfs.io/ipfs/${cid}`;
@@ -279,7 +285,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
     }
     // If no IPFS pattern found, return original URL
-    return url;
+    return trimmed;
   }, []);
 
   // Decide whether a URL should be proxied to avoid CORS issues (e.g. pinata gateways)
@@ -290,8 +296,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         'pinata',
         'gateway.pinata',
         'ipfs.io',
-        'cloudflare-ipfs.com',
         'dweb.link',
+        'gateway.ipfs.io',
+        'nftstorage.link',
+        'w3s.link',
         'infura',
         'ipfs.infura.io'
       ];
@@ -331,7 +339,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const trimmed = rawUrl.trim();
+    const trimmed = (preferIpfsGateway(rawUrl) ?? rawUrl).trim();
     const canonical = convertToIpfsIo(trimmed);
     const ipfsHash = extractIpfsHash(trimmed);
 

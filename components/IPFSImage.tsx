@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { extractIPFSHash, optimizeIPFSUrl } from '@/lib/ipfs-utils';
+import { extractIPFSHash, optimizeIPFSUrl, preferIpfsGateway } from '@/lib/ipfs-utils';
 
 interface IPFSImageProps {
   src: string;
@@ -36,21 +36,23 @@ const IPFSImage: React.FC<IPFSImageProps> = ({
       setIsLoading(true);
       setHasError(false);
 
-      const hash = extractIPFSHash(src);
+      const sanitizedSrc = preferIpfsGateway(src) || src;
+      const hash = extractIPFSHash(sanitizedSrc);
       if (!hash) {
         console.error('Invalid IPFS hash for image:', src);
-        setCurrentSrc(src);
+        setCurrentSrc(sanitizedSrc);
         setIsLoading(false);
         return;
       }
 
       // Try different IPFS gateways
       const gateways = [
-        'https://gateway.pinata.cloud/ipfs/',
         'https://ipfs.io/ipfs/',
-        'https://cloudflare-ipfs.com/ipfs/',
         'https://dweb.link/ipfs/',
-        'https://gateway.ipfs.io/ipfs/'
+        'https://gateway.ipfs.io/ipfs/',
+        'https://gateway.pinata.cloud/ipfs/',
+        'https://nftstorage.link/ipfs/',
+        'https://w3s.link/ipfs/'
       ];
 
       for (const gateway of gateways) {
@@ -83,7 +85,7 @@ const IPFSImage: React.FC<IPFSImageProps> = ({
       // All gateways failed
       console.error('Failed to load image from all IPFS gateways');
       setHasError(true);
-      setCurrentSrc(src); // Fallback to original URL
+      setCurrentSrc(sanitizedSrc); // Fallback to preferred URL
       setIsLoading(false);
     };
 

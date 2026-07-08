@@ -1,6 +1,22 @@
+import { networkInterfaces } from 'node:os';
 import type { NextConfig } from "next";
 
+const allowedDevOrigins = Array.from(
+  new Set([
+    ...(process.env.ALLOWED_DEV_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+    ...Object.values(networkInterfaces()).flatMap((entries) =>
+      (entries ?? [])
+        .filter((entry) => entry?.family === 'IPv4' && !entry.internal)
+        .map((entry) => entry.address)
+    ),
+  ])
+);
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins,
   images: {
     remotePatterns: [
       {
@@ -32,7 +48,6 @@ const nextConfig: NextConfig = {
   // Configure server external packages and large page data
   serverExternalPackages: ['sharp'],
   experimental: {
-    optimizePackageImports: ['lucide-react'],
     // Enable large request body handling
     largePageDataBytes: 128 * 1024 * 1024, // 128MB
   },

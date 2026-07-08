@@ -24,9 +24,10 @@ interface UniversalImageProps {
 const IPFS_GATEWAYS = [
   'https://ipfs.io/ipfs/',
   'https://gateway.ipfs.io/ipfs/',
-  'https://cloudflare-ipfs.com/ipfs/',
   'https://dweb.link/ipfs/',
   'https://gateway.pinata.cloud/ipfs/',
+  'https://nftstorage.link/ipfs/',
+  'https://w3s.link/ipfs/',
 ] as const;
 
 function extractIPFSHash(url: string): string | null {

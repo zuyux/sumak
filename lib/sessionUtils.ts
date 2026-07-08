@@ -76,3 +76,34 @@ export const checkForStaleDevnetConnections = () => {
   }
   return false;
 };
+
+export interface SumakSessionOptions {
+  walletType?: string | null;
+  provider?: string | null;
+  email?: string | null;
+  accountId?: string | number | null;
+  existingAccount?: boolean;
+  label?: string | null;
+}
+
+export const persistSumakSession = (address: string, options?: SumakSessionOptions) => {
+  if (typeof window === 'undefined' || !address) return;
+
+  const payload = {
+    address,
+    walletType: options?.walletType ?? 'imported',
+    provider: options?.provider ?? options?.walletType ?? 'imported',
+    connectedAt: Date.now(),
+    existingAccount: options?.existingAccount ?? true,
+    email: options?.email ?? null,
+    accountId: options?.accountId ?? null,
+    label: options?.label ?? null,
+  };
+
+  try {
+    localStorage.setItem('sumak_session', JSON.stringify(payload));
+    window.dispatchEvent(new Event('bbox-session-update'));
+  } catch (error) {
+    console.error('Failed to persist sumak session:', error);
+  }
+};
