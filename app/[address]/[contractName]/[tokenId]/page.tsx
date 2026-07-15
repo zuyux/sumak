@@ -359,75 +359,16 @@ export default function NFTDetailPage() {
   }, [metadata, audioUrl, audioBlobUrl, coverImageUrl, address, contractName, tokenId, deployerAddress, setCurrentAlbum, togglePlayPause, isPlaying, currentAlbum]);
 
 
-  // Utility functions for Satoshi conversion
-  const SATOSHIS_PER_STX = 1000; // 1 STX = 1,000,000 Satoshis
-
-  const fetchStxPrice = async (): Promise<number> => {
-    try {
-      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=blockstack&vs_currencies=usd');
-      const data = await response.json();
-      return data.blockstack?.usd || 0;
-    } catch (error) {
-      console.error('Error fetching STX price:', error);
-      return 0;
-    }
-  };
-
   const fetchNftPrice = useCallback(async () => {
     setPriceLoading(true);
     try {
-      // Try to fetch from our marketplace API first
-      const marketplaceResponse = await fetch(`/api/marketplace/${address}/${contractName}/${tokenId}`);
-
-      if (marketplaceResponse.ok) {
-        const marketplaceData = await marketplaceResponse.json();
-        if (marketplaceData.success) {
-          console.log('Found marketplace data:', marketplaceData);
-          return;
-        }
-      }
-
-      // Check price from database
-      if (supabaseAdmin) {
-        const { data: nftData, error, status } = await supabaseAdmin
-          .from('nfts')
-          .select('is_listed, list_price, list_currency')
-          .eq('contract_address', address)
-          .eq('contract_name', contractName)
-          .eq('token_id', parseInt(tokenId))
-          .maybeSingle();
-        if (error && status !== 406) {
-          console.warn('Could not fetch NFT price from database:', error);
-        }
-
-        // Fallback to default pricing if needed
-        const stxPriceUsd = await fetchStxPrice();
-        let nftPriceStx = 5; // Default fallback price
-
-        // Use database price if available
-        if (nftData?.is_listed && nftData.list_price) {
-          nftPriceStx = nftData.list_price / SATOSHIS_PER_STX;
-          console.log('Using database price:', nftData.list_price, 'satoshis');
-        } else {
-          console.log('No database price found, using default');
-        }
-
-        const priceSatoshis = nftPriceStx * SATOSHIS_PER_STX;
-        const priceUsd = nftPriceStx * stxPriceUsd;
-
-        console.log('Calculated price data:', {
-          stxPriceUsd,
-          nftPriceSatoshis: priceSatoshis,
-          nftPriceStx: nftPriceStx,
-          nftPriceUsd: priceUsd
-        });
-      }
+      await checkIfListed();
     } catch (error) {
       console.error('Error fetching NFT price:', error);
     } finally {
       setPriceLoading(false);
     }
-  }, [address, contractName, tokenId]);
+  }, [checkIfListed]);
 
   const fetchMetadataFromHiro = useCallback(async (): Promise<TokenMetadata | null> => {
     if (!address || !contractName || !tokenId) return null;

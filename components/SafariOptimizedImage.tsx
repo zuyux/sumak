@@ -114,6 +114,7 @@ export default function SafariOptimizedImage({
       className={optimizedClassName}
       onLoad={handleLoad}
       onError={handleError}
+      unoptimized
       quality={quality}
       priority={priority}
       placeholder={placeholder}

@@ -5,12 +5,10 @@ import { Search } from 'lucide-react';
 
 import { useState, useCallback } from 'react';
 import { SearchModal } from './SearchModal';
-import GetInModal from './GetInModal';
 import { useFullscreenContext } from './FullscreenProvider';
 
 export const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false);
-  const [getInOpen, setGetInOpen] = useState(false);
   const { isFullscreen, isBrowserFullscreen } = useFullscreenContext();
   const handleOpenSearch = useCallback(() => setSearchOpen(true), []);
   const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
@@ -21,7 +19,6 @@ export const Navbar = () => {
     return (
       <>
         <SearchModal open={searchOpen} onClose={handleCloseSearch} />
-        {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
       </>
     );
   }
@@ -56,14 +53,13 @@ export const Navbar = () => {
                 href="/player"
                 className="mr-2 inline-flex items-center rounded-xl bg-foreground px-4 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-80 md:mr-3 md:px-5 md:text-sm"
               >
-                Launch App
+                Launch
               </Link>
             </div>
           </div>
         </div>
       </nav>
       <SearchModal open={searchOpen} onClose={handleCloseSearch} />
-  {getInOpen && <GetInModal onClose={() => setGetInOpen(false)} />}
 
       <style jsx>{`
         .mobile-hide-placeholder::placeholder {

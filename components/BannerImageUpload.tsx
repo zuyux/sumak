@@ -71,7 +71,7 @@ export function BannerImageUpload({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Upload failed');
+        throw new Error(errorData.error || errorData.message || 'Upload failed');
       }
 
       const result = await response.json();
@@ -113,7 +113,7 @@ export function BannerImageUpload({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Remove failed');
+        throw new Error(errorData.error || errorData.message || 'Remove failed');
       }
 
       onRemoveSuccess();

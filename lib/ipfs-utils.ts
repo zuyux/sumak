@@ -11,7 +11,7 @@ export const IPFS_GATEWAYS = [
   'https://w3s.link/ipfs/',
 ] as const;
 
-const PINATA_GATEWAY_REGEX = /^https?:\/\/(?:[a-z0-9-]+\.)*gateway\.pinata\.cloud\/ipfs\//i;
+const PINATA_GATEWAY_REGEX = /^https?:\/\/(?:[a-z0-9-]+\.)*(?:gateway\.pinata\.cloud|mypinata\.cloud)\/ipfs\//i;
 
 /**
  * Prefiere el gateway público de ipfs.io cada vez que detectamos gateway.pinata.cloud
@@ -31,18 +31,30 @@ export function preferIpfsGateway(url?: string | null): string | null {
  * Extrae el hash IPFS de cualquier URL IPFS
  */
 export function extractIPFSHash(url: string): string | null {
+  const trimmed = url.trim();
+
   // Patrones para diferentes formatos de URL IPFS
   const patterns = [
-    /\/ipfs\/([a-zA-Z0-9]+)/,
-    /ipfs:\/\/([a-zA-Z0-9]+)/,
+    /\/ipfs\/([^/?#]+)/,
+    /ipfs:\/\/([^/?#]+)/,
     /^([a-zA-Z0-9]+)$/,
   ];
 
   for (const pattern of patterns) {
-    const match = url.match(pattern);
+    const match = trimmed.match(pattern);
     if (match) {
-      return match[1];
+      return decodeURIComponent(match[1]);
     }
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const subdomainMatch = parsed.hostname.match(/^([a-z0-9]+)\.ipfs\./i);
+    if (subdomainMatch) {
+      return subdomainMatch[1];
+    }
+  } catch {
+    // Ignore non-URL values; the regex cases above handle raw CIDs and ipfs:// URLs.
   }
 
   return null;
@@ -61,7 +73,11 @@ export function optimizeIPFSUrl(url: string, filename?: string): string {
 
   // Si estamos en Safari/iOS, usar nuestro proxy API como primera opción
   if (typeof window !== 'undefined' && isSafariOrIOS()) {
-    return `/api/ipfs-proxy?hash=${hash}&filename=${filename || 'sbtc-image.png'}`;
+    const params = new URLSearchParams({
+      hash,
+      filename: filename || 'sbtc-image.png',
+    });
+    return `/api/ipfs-proxy?${params.toString()}`;
   }
 
   // Para otros navegadores, usar el gateway principal
@@ -95,7 +111,11 @@ export function generateFallbackUrls(url: string, filename?: string): string[] {
   
   // Si estamos en Safari/iOS, priorizar nuestro proxy
   if (typeof window !== 'undefined' && isSafariOrIOS()) {
-    urls.push(`/api/ipfs-proxy?hash=${hash}&filename=${filename || 'sbtc-image.png'}`);
+    const params = new URLSearchParams({
+      hash,
+      filename: filename || 'sbtc-image.png',
+    });
+    urls.push(`/api/ipfs-proxy?${params.toString()}`);
   }
 
   // Agregar URLs de gateways directos

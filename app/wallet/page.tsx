@@ -302,7 +302,7 @@ export default function WalletPage() {
           ) : (
             <div className="my-8 text-center">
               <div className="title text-2xl font-bold select-all">{sbtcBalance}</div>
-              <div className="text-lg">Satoshis</div>
+              <div className="text-sm">SATOSHIS</div>
             </div>
           )}
         </div>

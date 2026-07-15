@@ -4,7 +4,7 @@ import { request as satsRequest } from 'sats-connect';
 import { useWallet, type WalletType } from './WalletProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, Wallet, Mail, Key } from 'lucide-react';
+import { X, Wallet } from 'lucide-react';
 import { validateAndGenerateWallet } from '@/lib/walletHelpers';
 import { detectWalletExtensions } from '@/lib/detectWalletExtensions';
 import { useEncryptedWallet } from './EncryptedWalletProvider';
@@ -50,6 +50,21 @@ interface ConnectModalProps {
 
 type ConnectMode = 'wallets' | 'email' | 'mnemonic';
 
+type StacksAddressEntry = {
+  symbol?: string;
+  address: string;
+  purpose?: string;
+};
+
+type LeatherProvider = {
+  request: (method: string, params?: unknown) => Promise<unknown>;
+};
+
+type WalletSignature = {
+  signature: string;
+  publicKey?: string;
+};
+
 interface EmailAccountPayload {
   account: {
     email: string;
@@ -90,6 +105,7 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
   const [walletConnectReady, setWalletConnectReady] = useState(false);
   const [walletConnectLoading, setWalletConnectLoading] = useState(false);
   const [walletConnectError, setWalletConnectError] = useState<string | null>(null);
+  const [activeWalletId, setActiveWalletId] = useState<string | null>(null);
 
   const { createEncryptedWallet } = useEncryptedWallet();
   const router = useRouter();
@@ -133,7 +149,21 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
     };
   }, []);
 
-  const persistSessionForWallet = useCallback(async (connectedAddress: string, providerType: WalletType) => {
+  const createWalletSignMessage = useCallback((connectedAddress: string) => {
+    return [
+      'Sign in to SUMAK',
+      `Address: ${connectedAddress}`,
+      `Origin: ${window.location.origin}`,
+      `Nonce: ${crypto.randomUUID()}`,
+      `Issued At: ${new Date().toISOString()}`,
+    ].join('\n');
+  }, []);
+
+  const persistSessionForWallet = useCallback(async (
+    connectedAddress: string,
+    providerType: WalletType,
+    signature?: WalletSignature
+  ) => {
     if (typeof window === 'undefined') return;
 
     try {
@@ -146,6 +176,8 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
         existingAccount: Boolean(existingAccount),
         email: existingAccount?.email ?? null,
         accountId: existingAccount?.id ?? null,
+        signature: signature?.signature ?? null,
+        publicKey: signature?.publicKey ?? null,
       };
       localStorage.setItem('sumak_session', JSON.stringify(sessionPayload));
       window.dispatchEvent(new Event('bbox-session-update'));
@@ -156,11 +188,154 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
         walletType: providerType,
         provider: providerType,
         connectedAt: Date.now(),
+        signature: signature?.signature ?? null,
+        publicKey: signature?.publicKey ?? null,
       };
       localStorage.setItem('sumak_session', JSON.stringify(fallbackPayload));
       window.dispatchEvent(new Event('bbox-session-update'));
     }
   }, []);
+
+  const ensureWalletProfile = useCallback(async (connectedAddress: string) => {
+    const response = await fetch('/api/profile/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: connectedAddress }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      const message =
+        payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+          ? payload.error
+          : 'Failed to create wallet account';
+      throw new Error(message);
+    }
+  }, []);
+
+  const getLeatherProvider = () => {
+    const provider = window.LeatherProvider;
+    if (
+      provider &&
+      typeof provider === 'object' &&
+      'request' in provider &&
+      typeof (provider as { request?: unknown }).request === 'function'
+    ) {
+      return provider as LeatherProvider;
+    }
+
+    throw new Error('Leather provider does not support request.');
+  };
+
+  const getLeatherAddress = async () => {
+    const response = await getLeatherProvider().request('getAddresses');
+    const addresses = Array.isArray((response as { result?: { addresses?: StacksAddressEntry[] } })?.result?.addresses)
+      ? (response as { result: { addresses: StacksAddressEntry[] } }).result.addresses
+      : [];
+    const stxAddress = addresses.find(addr => addr.symbol === 'STX' || addr.address.startsWith('S'))?.address;
+
+    if (!stxAddress) {
+      throw new Error('No Stacks address found in Leather.');
+    }
+
+    return stxAddress;
+  };
+
+  const signWithLeather = async (message: string): Promise<WalletSignature> => {
+    const response = await getLeatherProvider().request('stx_signMessage', { message });
+    const result = (response as { result?: WalletSignature })?.result;
+    if (!result?.signature) {
+      throw new Error('Leather did not return a signature.');
+    }
+
+    return result;
+  };
+
+  const getXverseAddress = async () => {
+    const response = await satsRequest('wallet_connect', null);
+    if (response.status !== 'success') {
+      throw new Error(response.error?.message || 'Failed to connect to Xverse.');
+    }
+
+    const stacksAddressItem = Array.isArray(response.result.addresses)
+      ? (response.result.addresses as StacksAddressEntry[]).find(address => address.purpose === 'stacks' || address.address.startsWith('S'))
+      : undefined;
+    const stxAddress = stacksAddressItem?.address;
+
+    if (!stxAddress) {
+      throw new Error('No Stacks address found in Xverse.');
+    }
+
+    return stxAddress;
+  };
+
+  const signWithXverse = async (message: string): Promise<WalletSignature> => {
+    const response = await satsRequest('stx_signMessage', { message });
+    if (response.status !== 'success') {
+      throw new Error(response.error?.message || 'Xverse did not sign the message.');
+    }
+
+    if (!response.result.signature) {
+      throw new Error('Xverse did not return a signature.');
+    }
+
+    return response.result;
+  };
+
+  const completeWalletSignIn = useCallback(async (providerType: Extract<WalletType, 'leather' | 'xverse'>) => {
+    try {
+      setIsLoading(true);
+      setActiveWalletId(providerType);
+      setError(null);
+
+      const connectedAddress = providerType === 'leather'
+        ? await getLeatherAddress()
+        : await getXverseAddress();
+      const message = createWalletSignMessage(connectedAddress);
+      const signature = providerType === 'leather'
+        ? await signWithLeather(message)
+        : await signWithXverse(message);
+
+      await ensureWalletProfile(connectedAddress);
+      setAddress(connectedAddress);
+      setWalletType(providerType);
+      await persistSessionForWallet(connectedAddress, providerType, signature);
+
+      onSuccess?.();
+      onClose();
+      router.push(`/${connectedAddress}`);
+    } catch (err: unknown) {
+      let msg = 'Failed to sign in with wallet.';
+      if (err && typeof err === 'object') {
+        if ('error' in err && typeof (err as { error?: { message?: string; code?: number } }).error === 'object') {
+          const rpcError = (err as { error?: { message?: string; code?: number } }).error;
+          if (typeof rpcError?.message === 'string') {
+            msg = rpcError.message;
+          } else if (typeof rpcError?.code === 'number') {
+            msg = `Wallet error code: ${rpcError.code}`;
+          }
+        } else if ('message' in err && typeof (err as { message?: string }).message === 'string') {
+          msg = (err as { message?: string }).message!;
+        }
+      }
+      setError(msg);
+      onError?.(msg);
+      console.error('Wallet sign-in error:', err);
+    } finally {
+      setIsLoading(false);
+      setActiveWalletId(null);
+    }
+  }, [
+    createWalletSignMessage,
+    ensureWalletProfile,
+    onClose,
+    onError,
+    onSuccess,
+    persistSessionForWallet,
+    router,
+    setAddress,
+    setWalletType,
+  ]);
 
   const handleWalletConnect = useCallback(async () => {
     if (!walletConnectConnectorRef.current) {
@@ -445,38 +620,48 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[101] select-none">
-      <div className="bg-white rounded-2xl w-[400px] max-w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[101] select-none px-4">
+      <div className="w-full max-w-[360px] max-h-[88vh] overflow-y-auto rounded-xl border border-white/10 bg-[#0b0b0d] text-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-            <Wallet className="w-5 h-5 mr-2" />
-            Connect a wallet
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <h2 className="text-base font-semibold text-white flex items-center">
+            <Wallet className="w-4 h-4 mr-2" />
+            Connect wallet
           </h2>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-900 transition-colors cursor-pointer"
+            className="text-white/45 hover:text-white transition-colors cursor-pointer"
             aria-label="Close"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-3">
           {connectMode === 'wallets' && (
             <>
               {(wallets.length === 0 || wallets.every(w => !w.installed)) && (
-                <div className="mb-2 text-gray-700 text-sm">
-                  You don&apos;t have unknown wallets in your browser that support this app. You need to install a wallet to proceed.
+                <div className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                  Install Leather or Xverse to sign in from this browser.
                 </div>
               )}
-              <div className="rounded-lg border border-gray-200 px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-gray-900">WalletConnect</div>
-                  <div className="text-xs text-gray-500">Use any compatible mobile or desktop wallet.</div>
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Image
+                    src="/wallet-connect.png"
+                    alt="WalletConnect"
+                    width={24}
+                    height={24}
+                    className="w-6 h-6 rounded"
+                    unoptimized
+                  />
+                  <div>
+                    <div className="font-semibold text-sm text-white">WalletConnect</div>
+                    <div className="text-xs text-white/45">Mobile or desktop wallet</div>
+                  </div>
                 </div>
                 <Button
-                  className="bg-black text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer disabled:cursor-not-allowed"
+                  className="h-8 rounded-md bg-white px-3 text-xs font-semibold text-black hover:bg-white/90 cursor-pointer disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/35"
                   onClick={handleWalletConnect}
                   disabled={!walletConnectReady || walletConnectLoading}
                 >
@@ -490,164 +675,58 @@ export default function ConnectModal({ onClose, onSuccess, onError }: ConnectMod
                 </Button>
               </div>
               {walletConnectError && (
-                <p className="text-xs text-red-500 mt-2">{walletConnectError}</p>
+                <p className="text-xs text-red-300">{walletConnectError}</p>
               )}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {wallets.map(w => (
-                  <div key={w.id} className="flex items-center justify-between rounded-lg px-4 py-3">
+                  <div key={w.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 gap-3">
                     <div className="flex items-center gap-3">
                       <Image
                         src={w.id === 'leather' ? '/leather.svg' : w.id === 'xverse' ? '/xverse.svg' : ''}
                         alt={w.name}
-                        width={28}
-                        height={28}
-                        className="w-7 h-7 rounded"
+                        width={24}
+                        height={24}
+                        className="w-6 h-6 rounded"
                         unoptimized
                       />
                       <div>
-                        <div className="font-semibold text-gray-900">{w.name}</div>
-                        <div className="text-xs text-gray-500">{w.url.replace('https://', '')}</div>
+                        <div className="font-semibold text-sm text-white">{w.name}</div>
+                        <div className="text-xs text-white/45">{w.url.replace('https://', '')}</div>
                       </div>
                     </div>
                     {w.installed ? (
                       <Button
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded-lg text-sm font-semibold cursor-pointer"
-                        onClick={async () => {
-                          try {
-                            if (w.id === 'leather' && window.LeatherProvider) {
-                              const provider = window.LeatherProvider;
-                              if (
-                                provider &&
-                                typeof provider === 'object' &&
-                                'request' in provider &&
-                                typeof (provider as { request?: unknown }).request === 'function'
-                              ) {
-                                // Use the latest Leather API: getAddresses
-                                const response = await (provider as { request: (method: string, params?: unknown) => Promise<unknown> }).request('getAddresses');
-                                const stxAddress = Array.isArray((response as { result?: { addresses?: { symbol: string; address: string }[] } })?.result?.addresses)
-                                  ? ((response as { result: { addresses: { symbol: string; address: string }[] } }).result.addresses.find(addr => addr.symbol === 'STX')?.address)
-                                  : undefined;
-                                if (stxAddress) {
-                                  setAddress(stxAddress);
-                                  setWalletType('leather');
-                                  await persistSessionForWallet(stxAddress, 'leather');
-                                  onSuccess?.();
-                                  onClose();
-                                  router.push(`/${stxAddress}`);
-                                } else {
-                                  setError('No Stacks address found in Leather.');
-                                  onError?.('No Stacks address found in Leather.');
-                                  console.warn('No Stacks address found in Leather.');
-                                }
-                              } else {
-                                setError('Leather provider does not support request.');
-                                onError?.('Leather provider does not support request.');
-                                console.warn('Leather provider does not support request.');
-                              }
-                            } else if (w.id === 'xverse') {
-                              // Use Sats Connect API for Xverse
-                              try {
-                                const response = await satsRequest('wallet_connect', null);
-                                if (response.status === 'success') {
-                                  const stacksAddressItem = Array.isArray(response.result.addresses)
-                                    ? (response.result.addresses as { purpose: string; address: string }[]).find(address => address.purpose === 'stacks')
-                                    : undefined;
-                                  const stxAddress = stacksAddressItem?.address;
-                                  if (stxAddress) {
-                                    setAddress(stxAddress);
-                                    setWalletType('xverse');
-                                    await persistSessionForWallet(stxAddress, 'xverse');
-                                    onSuccess?.();
-                                    onClose();
-                                    router.push(`/${stxAddress}`);
-                                  } else {
-                                    setError('No Stacks address found in Xverse.');
-                                    onError?.('No Stacks address found in Xverse.');
-                                    console.warn('No Stacks address found in Xverse.');
-                                  }
-                                } else {
-                                  setError(response.error?.message || 'Failed to connect to Xverse.');
-                                  onError?.(response.error?.message || 'Failed to connect to Xverse.');
-                                  console.warn('Xverse connect error:', response.error);
-                                }
-                              } catch (err: unknown) {
-                                let errorMsg = 'Failed to connect to Xverse.';
-                                if (
-                                  typeof err === 'object' &&
-                                  err !== null &&
-                                  'error' in err &&
-                                  typeof (err as { error?: { message?: string } }).error === 'object' &&
-                                  (err as { error?: { message?: string } }).error &&
-                                  typeof (err as { error?: { message?: string } }).error!.message === 'string'
-                                ) {
-                                  errorMsg = (err as { error: { message: string } }).error.message;
-                                }
-                                setError(errorMsg);
-                                onError?.(errorMsg);
-                                console.error('Xverse connect error:', err);
-                              }
-                            } else {
-                              setError('Wallet provider not found.');
-                              onError?.('Wallet provider not found.');
-                              console.warn('Wallet provider not found for:', w.id);
-                            }
-                          } catch (err: unknown) {
-                            let msg = 'Failed to connect wallet.';
-                            if (err && typeof err === 'object') {
-                              // Handle JSON-RPC error shape
-                              if ('error' in err && typeof (err as { error?: { message?: string; code?: number } }).error === 'object') {
-                                const rpcError = (err as { error?: { message?: string; code?: number } }).error;
-                                if (typeof rpcError?.message === 'string') {
-                                  msg = rpcError.message;
-                                } else if (typeof rpcError?.code === 'number') {
-                                  msg = `Wallet error code: ${rpcError.code}`;
-                                }
-                              } else if ('message' in err && typeof (err as { message?: string }).message === 'string') {
-                                msg = (err as { message?: string }).message!;
-                              }
-                            }
-                            setError(msg);
-                            onError?.(msg);
-                            console.error('Wallet connect error:', err);
+                        className="h-8 rounded-md bg-[#0000ff] px-3 text-xs font-semibold text-white hover:bg-[#0000d9] cursor-pointer disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/35"
+                        onClick={() => {
+                          if (w.id === 'leather' || w.id === 'xverse') {
+                            void completeWalletSignIn(w.id);
+                          } else {
+                            setError('Wallet provider not found.');
+                            onError?.('Wallet provider not found.');
                           }
                         }}
+                        disabled={isLoading}
                       >
-                        Connect
+                        {activeWalletId === w.id ? 'Signing...' : 'Sign'}
                       </Button>
                     ) : (
                       <a
                         href={w.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-gray-700 px-4 py-1 rounded-lg text-sm font-semibold hover:bg-gray-100 cursor-pointer"
+                        className="rounded-md px-3 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white cursor-pointer"
                       >
-                        Install →
+                        Install
                       </a>
                     )}
                   </div>
                 ))}
               </div>
-              <div className="flex items-center my-4">
-                <div className="flex-grow border-t border-gray-200"></div>
-                <span className="mx-2 text-xs text-gray-400">or</span>
-                <div className="flex-grow border-t border-gray-200"></div>
-              </div>
-              <Button
-                onClick={() => setConnectMode('email')}
-                className="w-full h-12 rounded-lg mb-2 bg-white text-gray-900 border border-gray-300 font-semibold text-base flex items-center px-4 hover:bg-gray-50 cursor-pointer"
-                type="button"
-              >
-                <Mail className="w-5 h-5 mr-2" />
-                Sign In with Email
-              </Button>
-              <Button
-                onClick={() => setConnectMode('mnemonic')}
-                className="w-full h-12 rounded-lg bg-white text-gray-900 border border-gray-300 font-semibold text-base flex items-center px-4 hover:bg-gray-50 cursor-pointer"
-                type="button"
-              >
-                <Key className="w-5 h-5 mr-2" />
-                Import with Mnemonic
-              </Button>
+              {error && (
+                <div className="rounded-md border border-red-400/25 bg-red-500/10 p-3 text-xs text-red-200">
+                  {error}
+                </div>
+              )}
             </>
           )}
           {connectMode === 'email' && (

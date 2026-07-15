@@ -188,15 +188,7 @@ export default function UserModal({ onClose }: UserModalProps) {
   return (
     <div className="fixed top-9 right-3 z-[200]">
       <div ref={modalRef} className="relative rounded-3xl p-4 w-[340px] flex flex-col items-center shadow-xl pointer-events-auto z-[201] opacity-0 translate-y-[-24px] animate-getinmodal backdrop-blur-md border bg-white dark:bg-black border-gray-200 dark:border-white/20 text-gray-900 dark:text-white">
-        <div className="flex items-center w-full mb-6">
-          {/* MINT button on the left */}
-          <button
-            onClick={() => { onClose(); router.push('/mint'); }}
-            className="px-6 py-1.5 bg-background/10 border border-foreground/50 text-foreground text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 cursor-pointer select-none mr-3"
-          >
-            MINT
-          </button>
-          
+        <div className="flex items-center w-full mb-3">
           <Link
             href={`/${currentAddress}`}
             className="title mr-4 text-right text-gray-900 dark:text-white text-xl font-bold tracking-wider flex-1 cursor-pointer select-none"
@@ -239,8 +231,8 @@ export default function UserModal({ onClose }: UserModalProps) {
             </button>
           </div>
         </div>
-        <div className="w-full mb-4">
-          <div className="flex items-center justify-between bg-white/5 backdrop-blur-sm rounded-xl px-6 py-4 mb-2 border border-white/10">
+        <div className="w-full mb-3">
+          <div className="flex items-center justify-between bg-white/5 backdrop-blur-sm rounded-xl px-6 py-4 mb-0 border border-white/10">
             <button
               onClick={() => { onClose(); router.push('/wallet'); }}
               className="title text-2xl font-bold text-left text-gray-900 dark:text-white hover:underline cursor-pointer select-none"
@@ -250,7 +242,7 @@ export default function UserModal({ onClose }: UserModalProps) {
                 <LoaderCircle className="animate-spin text-black dark:text-white inline-block align-middle" size={32} />
               ) : (
                 <>
-                  {formatBalance(sbtcBalance)} <span className="text-lg">SATS</span>
+                  <span className="text-sm align-middle">{formatBalance(sbtcBalance)} 丰</span>
                 </>
               )}
             </button>

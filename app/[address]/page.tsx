@@ -7,7 +7,7 @@ import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { getProfile, Profile } from '@/lib/profileApi';
 import { getNftsByCreator } from '@/lib/nftApi';
 import Image from 'next/image';
-import { User, MapPin, Calendar, Briefcase, Globe, Pen, LoaderCircle } from 'lucide-react';
+import { User, MapPin, Globe, Pen, LoaderCircle } from 'lucide-react';
 import { getIPFSUrl } from '@/lib/pinataUpload';
 import SafariOptimizedImage from '@/components/SafariOptimizedImage';
 
@@ -271,18 +271,6 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
             </div>
           </div>
 
-          {profile.tagline && (
-            <p className="text-xl text-white/90 drop-shadow bg-black/20 backdrop-blur-sm px-6 py-3 rounded-xl">
-              {profile.tagline}
-            </p>
-          )}
-
-          {profile.biography && (
-            <p className="text-lg text-white/80 leading-relaxed bg-black/20 backdrop-blur-sm px-6 py-4 rounded-xl">
-              {profile.biography}
-            </p>
-          )}
-
           <div className="flex flex-wrap justify-center gap-4 text-white/70">
             {profile.location && (
               <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
@@ -290,40 +278,7 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 <span>{profile.location}</span>
               </div>
             )}
-            {profile.occupation && (
-              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                <Briefcase className="w-5 h-5" />
-                <span>{profile.occupation}</span>
-                {profile.company && <span> at {profile.company}</span>}
-              </div>
-            )}
-            {profile.years_experience && profile.years_experience > 0 && (
-              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                <Calendar className="w-5 h-5" />
-                <span>{profile.years_experience} years experience</span>
-              </div>
-            )}
           </div>
-
-          {profile.skills && profile.skills.length > 0 && (
-            <div className="bg-black/20 backdrop-blur-sm px-6 py-4 rounded-xl">
-              <div className="flex flex-wrap justify-center gap-2">
-                {profile.skills.slice(0, 12).map((skill) => (
-                  <span
-                    key={skill}
-                    className="px-3 py-1 bg-white/20 text-white/90 rounded-full text-sm backdrop-blur-sm"
-                  >
-                    {skill}
-                  </span>
-                ))}
-                {profile.skills.length > 12 && (
-                  <span className="px-3 py-1 bg-white/10 text-white/60 rounded-full text-sm backdrop-blur-sm">
-                    +{profile.skills.length - 12} more
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="flex flex-wrap justify-center gap-4">
             {profile.website && (

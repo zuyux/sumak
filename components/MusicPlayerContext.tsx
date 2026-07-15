@@ -109,8 +109,8 @@ interface MusicPlayerContextType {
 const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
 
 const IPFS_GATEWAY_FALLBACKS = [
-  'https://ipfs.io/ipfs/',
   'https://gateway.pinata.cloud/ipfs/',
+  'https://ipfs.io/ipfs/',
   'https://gateway.ipfs.io/ipfs/',
   'https://w3s.link/ipfs/',
   'https://nftstorage.link/ipfs/',
@@ -332,17 +332,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     };
     const pushWithProxy = (candidate: string | null) => {
       if (!candidate) return;
+      // Public IPFS gateways support CORS and byte-range requests, so let the
+      // browser stream from them directly. Keep the proxy as a fallback.
+      push(candidate);
       const prox = maybeProxy(candidate);
       if (prox !== candidate) {
-        // Web Audio analysis requires a CORS-clean response. Prefer our
-        // same-origin proxy for IPFS gateways, then retain the direct URL as
-        // a playback fallback.
         push(prox);
       }
-      push(candidate);
     };
 
-    const trimmed = (preferIpfsGateway(rawUrl) ?? rawUrl).trim();
+    // Preserve the stored gateway first; it is often the pinning provider
+    // that is most likely to have the content locally.
+    const trimmed = rawUrl.trim();
     const canonical = convertToIpfsIo(trimmed);
     const ipfsHash = extractIpfsHash(trimmed);
 
@@ -554,7 +555,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
         // Attach listeners
         audioEl.addEventListener('error', onError);
-        audioEl.addEventListener('stalled', onError);
         audioEl.addEventListener('canplay', onCanPlay);
 
         // Start with first candidate
@@ -564,7 +564,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         return () => {
           try {
             audioEl.removeEventListener('error', onError);
-            audioEl.removeEventListener('stalled', onError);
             audioEl.removeEventListener('canplay', onCanPlay);
           } catch {
             // ignore

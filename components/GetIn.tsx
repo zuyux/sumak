@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { useEncryptedWallet } from './EncryptedWalletProvider';
 import { Button } from '@/components/ui/button';
-import GetInModal from './GetInModal';
+import ConnectModal from './ConnectModal';
 import UserModal from './UserModal';
 import { User } from 'lucide-react';
 import Image from 'next/image';
@@ -20,7 +20,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   const { children } = buttonProps;
   const { isFullscreen } = useFullscreenContext();
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showGetInModal, setShowGetInModal] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [isSessionLoggedIn, setIsSessionLoggedIn] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const currentAddress = useCurrentAddress();
@@ -101,7 +101,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
     return (
       <>
         {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
-        {showGetInModal && <GetInModal onClose={() => setShowGetInModal(false)} />}
+        {showConnectModal && <ConnectModal onClose={() => setShowConnectModal(false)} />}
       </>
     );
   }
@@ -153,7 +153,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
         <div className='fixed top-3 right-2 md:right-4 z-100 flex items-center'>
           <div>
             <Button
-              onClick={() => setShowGetInModal(true)}
+              onClick={() => setShowConnectModal(true)}
               className="title rounded-md px-2 md:px-6 py-4 md:py-2 text-xs md:text-sm bg-background/50 hover:bg-[#fff] hover:text-background text-foreground cursor-pointer select-none"
               {...buttonProps}
             >
@@ -162,7 +162,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
           </div>
         </div>
       )}
-      {showGetInModal && <GetInModal onClose={() => setShowGetInModal(false)} />}
+      {showConnectModal && <ConnectModal onClose={() => setShowConnectModal(false)} />}
     </>
   );
 };
