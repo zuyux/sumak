@@ -14,7 +14,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ProfilePictureUpload } from "@/components/ProfilePictureUpload";
 import { BannerImageUpload } from "@/components/BannerImageUpload";
+import LocationMapModal from "@/components/LocationMapModal";
+import { MapPin, X } from "lucide-react";
 import { toast } from "sonner";
+
+function parseCoordinates(value: string): { lat: number; lng: number } | undefined {
+  const match = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (!match) return undefined;
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+    ? { lat, lng }
+    : undefined;
+}
 
 export default function SettingsPage() {
   const address = useCurrentAddress();
@@ -29,6 +42,7 @@ export default function SettingsPage() {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [location, setLocation] = useState('');
+  const [isLocationMapOpen, setIsLocationMapOpen] = useState(false);
   
   // Social Links
   const [website, setWebsite] = useState('');
@@ -36,6 +50,9 @@ export default function SettingsPage() {
   const [discord, setDiscord] = useState('');
   const [instagram, setInstagram] = useState('');
   const [linkedin, setLinkedin] = useState('');
+  const [spotify, setSpotify] = useState('');
+  const [soundcloud, setSoundcloud] = useState('');
+  const [audius, setAudius] = useState('');
   
   // Profile Media
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -80,6 +97,9 @@ export default function SettingsPage() {
           setDiscord(profile.discord || '');
           setInstagram(profile.instagram || '');
           setLinkedin(profile.linkedin || '');
+          setSpotify(profile.spotify || '');
+          setSoundcloud(profile.soundcloud || '');
+          setAudius(profile.audius || '');
           setAvatarUrl(profile.avatar_url || '');
           setAvatarCid(profile.avatar_cid || '');
           setBannerUrl(profile.banner_url || '');
@@ -122,11 +142,14 @@ export default function SettingsPage() {
         email: email.trim() || undefined,
         display_name: displayName.trim() || undefined,
         location: location.trim() || undefined,
-        website: website.trim() || undefined,
-        twitter: twitter.trim() || undefined,
-        discord: discord.trim() || undefined,
-        instagram: instagram.trim() || undefined,
-        linkedin: linkedin.trim() || undefined,
+        website: website.trim(),
+        twitter: twitter.trim(),
+        discord: discord.trim(),
+        instagram: instagram.trim(),
+        linkedin: linkedin.trim(),
+        spotify: spotify.trim(),
+        soundcloud: soundcloud.trim(),
+        audius: audius.trim(),
         avatar_url: avatarUrl.trim() || undefined,
         avatar_cid: avatarCid.trim() || undefined,
         banner_url: bannerUrl.trim() || undefined,
@@ -327,14 +350,33 @@ export default function SettingsPage() {
                   
                   <div>
                     <label className="block mb-2 text-sm font-medium">Location</label>
-                    <input
-                      className="w-full px-4 py-2 rounded-lg bg-accent-background text-accent-foreground border border-[#222] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      type="text"
-                      value={location}
-                      onChange={e => setLocation(e.target.value)}
-                      placeholder="City, Country"
-                      maxLength={100}
-                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsLocationMapOpen(true)}
+                        className="flex min-h-10 flex-1 items-center gap-2 rounded-lg border border-[#222] bg-accent-background px-4 py-2 text-left text-accent-foreground focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <MapPin className="h-4 w-4 shrink-0" />
+                        <span className={location ? "font-mono text-sm" : "text-sm text-gray-400"}>
+                          {location || 'Select on OpenStreetMap'}
+                        </span>
+                      </button>
+                      {location && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setLocation('')}
+                          aria-label="Clear location"
+                          title="Clear location"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Stored as latitude, longitude.
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -402,9 +444,43 @@ export default function SettingsPage() {
                       placeholder="linkedin.com/in/username"
                     />
                   </div>
+
+                  <div>
+                    <label className="block mb-2 text-sm font-medium">Spotify</label>
+                    <input
+                      className="w-full px-4 py-2 rounded-lg bg-accent-background text-accent-foreground border border-[#222] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      type="url"
+                      value={spotify}
+                      onChange={e => setSpotify(e.target.value)}
+                      placeholder="https://open.spotify.com/artist/..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-2 text-sm font-medium">SoundCloud</label>
+                    <input
+                      className="w-full px-4 py-2 rounded-lg bg-accent-background text-accent-foreground border border-[#222] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      type="text"
+                      value={soundcloud}
+                      onChange={e => setSoundcloud(e.target.value)}
+                      placeholder="username"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-2 text-sm font-medium">Audius</label>
+                    <input
+                      className="w-full px-4 py-2 rounded-lg bg-accent-background text-accent-foreground border border-[#222] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      type="text"
+                      value={audius}
+                      onChange={e => setAudius(e.target.value)}
+                      placeholder="username"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
           </TabsContent>
 
           <TabsContent value="privacy" className="space-y-6 mt-6">
@@ -424,21 +500,6 @@ export default function SettingsPage() {
                         checked={profilePublic}
                         onCheckedChange={v => setProfilePublic(!!v)}
                         aria-label="Public Profile"
-                        className="h-6 w-6 cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium">Show Email</h4>
-                      <p className="text-xs text-gray-400">Show your email on your public profile</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <Checkbox
-                        checked={showEmail}
-                        onCheckedChange={v => setShowEmail(!!v)}
-                        aria-label="Show Email"
                         className="h-6 w-6 cursor-pointer"
                       />
                     </label>
@@ -511,6 +572,42 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                <hr className="border-gray-700" />
+
+                <div>
+                  <h3 className="text-lg font-medium text-red-400">Danger Zone</h3>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Permanently delete your account and profile data.
+                  </p>
+                  <Link
+                    href="/settings/api/delete"
+                    className="mt-4 inline-flex rounded-lg border border-red-500/50 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                  >
+                    Delete Account
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-accent-background border-gray-200 dark:border-gray-700 text-accent-foreground">
+              <CardHeader>
+                <CardTitle>About SUMAK</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                <p>
+                  SUMAK is an open-source project built to help artists form stronger, more direct
+                  connections with their listeners, with as few intermediaries as possible.
+                </p>
+                <p>
+                  By using blockchain technology in Bitcoin L2 Stacks network, SUMAK supports transparent provenance, digital
+                  property rights, and new ways for creators to share and distribute their work while
+                  retaining greater control over it.
+                </p>
+                <p>
+                  Our goal is an open and artist-first ecosystem where technology strengthens creative
+                  communities and brings creators and listeners closer together.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -519,7 +616,7 @@ export default function SettingsPage() {
             <Button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-6 cursor-pointer"
+              className="flex-1 bg-white hover:bg-white/90 text-black py-6 cursor-pointer"
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
@@ -527,26 +624,28 @@ export default function SettingsPage() {
         </form>
       </Tabs>
 
-      {/* Account Management Links */}
-      <div className="mt-12 pt-8 border-t border-gray-700">
-        <div className="space-y-3">
-          {/* Only show Change Password button for encrypted wallet users */}
-          {!isExtensionWallet && (
+      {/* Only show password management for encrypted wallet users */}
+      {!isExtensionWallet && (
+        <div className="mt-12 pt-8 border-t border-gray-700">
+          <div className="space-y-3">
             <Link
               href="/settings/password"
               className="block w-full text-center py-3 px-4 rounded-lg border border-[#222] bg-accent-background text-accent-foreground hover:underline"
             >
               Change Password
             </Link>
-          )}
-          <Link
-            href="/settings/api/delete"
-            className="block w-full text-center text-red-400 py-3 px-4transition-colors"
-          >
-            Delete Account
-          </Link>
+          </div>
         </div>
-      </div>
+      )}
+
+      <LocationMapModal
+        isOpen={isLocationMapOpen}
+        onClose={() => setIsLocationMapOpen(false)}
+        initialLocation={parseCoordinates(location)}
+        onLocationSelect={({ lat, lng }) => {
+          setLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        }}
+      />
 
   {/* Passphrase signing modal removed. Passphrase is now verified inline. */}
     </div>

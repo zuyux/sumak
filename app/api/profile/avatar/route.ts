@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadFileToPinata, unpinFromPinata, getIPFSUrl } from '@/lib/pinataUpload';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseAdmin } from '@/lib/supabaseClient';
+import sharp from 'sharp';
+
+const AVATAR_SIZE = 256;
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']);
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,8 +21,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload new file to Pinata
-    const uploadResult = await uploadFileToPinata(file);
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.' },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE) {
+      return NextResponse.json({ error: 'File too large. Maximum size is 10MB.' }, { status: 400 });
+    }
+
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Database is unavailable' }, { status: 500 });
+    }
+
+    // Normalize every avatar to a compact square WebP. The attention crop keeps
+    // faces and other visually important regions centered without stretching.
+    const resizedBuffer = await sharp(Buffer.from(await file.arrayBuffer()))
+      .rotate()
+      .resize(AVATAR_SIZE, AVATAR_SIZE, {
+        fit: 'cover',
+        position: sharp.strategy.attention,
+      })
+      .webp({ quality: 82 })
+      .toBuffer();
+    const resizedFile = new File(
+      [new Uint8Array(resizedBuffer)],
+      `avatar-${address.slice(0, 8)}-${Date.now()}.webp`,
+      { type: 'image/webp' }
+    );
+
+    // Upload only the optimized avatar to Pinata.
+    const uploadResult = await uploadFileToPinata(resizedFile);
     
     if (!uploadResult.success) {
       return NextResponse.json(
@@ -30,7 +66,7 @@ export async function POST(request: NextRequest) {
     const avatarUrl = getIPFSUrl(cid);
 
     // First, try to find existing profile with case-insensitive search
-    const { data: existingProfiles } = await supabase
+    const { data: existingProfiles } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .ilike('address', address);
@@ -40,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (existingProfiles && existingProfiles.length > 0) {
       // Update existing profile (use the first match)
       const existingProfile = existingProfiles[0];
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('profiles')
         .update({
           avatar_cid: cid,
@@ -52,7 +88,7 @@ export async function POST(request: NextRequest) {
       updateError = error;
     } else {
       // No existing profile found, create new one with normalized address
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('profiles')
         .insert({
           address: address.toLowerCase(),
@@ -89,6 +125,9 @@ export async function POST(request: NextRequest) {
       success: true,
       cid,
       avatarUrl,
+      width: AVATAR_SIZE,
+      height: AVATAR_SIZE,
+      format: 'webp',
       message: 'Profile picture updated successfully'
     });
 
@@ -114,8 +153,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Database is unavailable' }, { status: 500 });
+    }
+
     // First, find existing profile with case-insensitive search
-    const { data: existingProfiles } = await supabase
+    const { data: existingProfiles } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .ilike('address', address);
@@ -129,7 +172,7 @@ export async function DELETE(request: NextRequest) {
 
     // Remove avatar from profile in Supabase (use the first match)
     const existingProfile = existingProfiles[0];
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({
         avatar_cid: null,

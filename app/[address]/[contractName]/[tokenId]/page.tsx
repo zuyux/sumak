@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { fetchCallReadOnlyFunction, uintCV, cvToJSON, contractPrincipalCV } from '@stacks/transactions';
 import { request } from '@stacks/connect';
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
-import axios from 'axios';
 import { ArrowLeft, ExternalLink, Share2, Heart, RefreshCw, Eye, MoreHorizontal, Play, Pause, ShoppingCart, Coins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,7 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useMusicPlayer } from '@/components/MusicPlayerContext';
 import { useCurrentAddress } from '@/hooks/useCurrentAddress';
-import { supabaseAdmin } from '@/lib/supabaseClient';
 import { resolveNetwork } from '@/lib/network';
 // import { getProfile } from '@/lib/profileApi';
 // Temporarily removed import: import { getNftsByCreator } from '@/lib/nftApi';
@@ -146,9 +144,7 @@ export default function NFTDetailPage() {
   const [error, setError] = useState<string>('');
   const [audioUrl, setAudioUrl] = useState<string>('');
   const [coverImageUrl, setCoverImageUrl] = useState<string>('');
-  const [audioBlobUrl, setAudioBlobUrl] = useState<string>('');
-  const audioCacheKey = `nft-audio-${address}-${contractName}-${tokenId}`;
-  const audioBlobUrlRef = useRef<string | null>(null);
+  const [coverImageLoading, setCoverImageLoading] = useState(false);
   const [priceLoading, setPriceLoading] = useState(false);
   type CreatorProfile = {
     avatar_url?: string;
@@ -162,25 +158,13 @@ export default function NFTDetailPage() {
 
   // Function to fetch NFT data from database
   const fetchNFTFromDatabase = useCallback(async (): Promise<DatabaseNFTRecord | null> => {
-    if (!address || !contractName || !tokenId || !supabaseAdmin) return null;
+    if (!address || !contractName || !tokenId) return null;
     try {
-      // Use maybeSingle() to avoid 406 error when no rows
-      const { data, error, status } = await supabaseAdmin
-        .from('nfts')
-        .select('*')
-        .eq('contract_address', address)
-        .eq('contract_name', contractName)
-        .eq('token_id', parseInt(tokenId))
-        .maybeSingle();
-      if (error) {
-        if (status === 406) {
-          // No rows found, not an error
-          return null;
-        }
-        console.warn('Could not fetch NFT from database:', error);
-        return null;
-      }
-      return data as DatabaseNFTRecord;
+      const search = new URLSearchParams({ contractAddress: address, contractName, tokenId });
+      const response = await fetch(`/api/nfts?${search}`, { cache: 'force-cache' });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      return (payload.data?.[0] as DatabaseNFTRecord | undefined) ?? null;
     } catch (err) {
       console.error('Error fetching NFT from database:', err);
       return null;
@@ -189,39 +173,19 @@ export default function NFTDetailPage() {
 
   // Contract interaction functions
   const checkIfListed = useCallback(async () => {
-    if (!address || !contractName || !tokenId || !supabaseAdmin) return;
+    if (!address || !contractName || !tokenId) return;
     
     try {
       setIsLoading(true);
       
-      // Check listing status from database instead of contract
-      const { data, error, status } = await supabaseAdmin
-        .from('nfts')
-        .select('is_listed, list_price, list_currency')
-        .eq('contract_address', address)
-        .eq('contract_name', contractName)
-        .eq('token_id', parseInt(tokenId))
-        .maybeSingle();
-      if (error) {
-        if (status === 406) {
-          // No rows found, not an error
-          setIsListed(false);
-          setListingPrice(null);
-          return;
-        }
-        console.warn('Could not fetch listing status from database:', error);
-        setIsListed(false);
-        setListingPrice(null);
-        return;
-      }
+      const search = new URLSearchParams({ contractAddress: address, contractName, tokenId });
+      const response = await fetch(`/api/nfts?${search}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not fetch listing status');
+      const payload = await response.json();
+      const data = payload.data?.[0];
       if (data) {
         setIsListed(data.is_listed || false);
         setListingPrice(data.list_price || null);
-        console.log('Listing status from database:', { 
-          isListed: data.is_listed, 
-          price: data.list_price,
-          currency: data.list_currency 
-        });
       } else {
         setIsListed(false);
         setListingPrice(null);
@@ -282,10 +246,6 @@ export default function NFTDetailPage() {
     }
   }, [currentUserAddress, address, contractName, tokenId, listingPrice, checkIfListed, stacksNetworkName]);
 
-  // Check if NFT is listed when component mounts
-  useEffect(() => {
-    checkIfListed();
-  }, [checkIfListed]);
   const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'bids' | 'activity'>('overview');
   const [contractTxData, setContractTxData] = useState<{
     burn_block_time: number;
@@ -319,7 +279,7 @@ export default function NFTDetailPage() {
         name: metadata.name || `Token #${tokenId}`,
         description: metadata.description || '',
         image: coverImageUrl || metadata.image || '',
-        audio_url: audioBlobUrl || audioUrl,
+        audio_url: audioUrl,
         animation_url: metadata.animation_url || '',
         external_url: metadata.external_url || '',
         attributes: [
@@ -338,7 +298,7 @@ export default function NFTDetailPage() {
           channels: 2,
           sample_rate: 44100,
           title: metadata.name || `Token #${tokenId}`,
-          audio_file: audioBlobUrl || audioUrl,
+          audio_file: audioUrl,
         },
         interoperabilityFormats: [],
         customizationData: {},
@@ -356,7 +316,7 @@ export default function NFTDetailPage() {
         togglePlayPause(); 
       }
     }, 100);
-  }, [metadata, audioUrl, audioBlobUrl, coverImageUrl, address, contractName, tokenId, deployerAddress, setCurrentAlbum, togglePlayPause, isPlaying, currentAlbum]);
+  }, [metadata, audioUrl, coverImageUrl, address, contractName, tokenId, deployerAddress, setCurrentAlbum, togglePlayPause, isPlaying, currentAlbum]);
 
 
   const fetchNftPrice = useCallback(async () => {
@@ -419,18 +379,11 @@ export default function NFTDetailPage() {
         setLoading(true);
         setError('');
 
-        // Try to load audio from localStorage first
-        try {
-          const cached = localStorage.getItem(audioCacheKey);
-          if (cached) {
-            const blob = new Blob([Uint8Array.from(atob(cached), c => c.charCodeAt(0))]);
-            const blobUrl = URL.createObjectURL(blob);
-            setAudioBlobUrl(blobUrl);
-            audioBlobUrlRef.current = blobUrl;
-          }
-        } catch { /* ignore */ }
-
-        const dbNftData = await fetchNFTFromDatabase();
+        // Start both sources together. A database hit can render without waiting
+        // for the slower external indexer.
+        const dbPromise = fetchNFTFromDatabase();
+        const hiroPromise = fetchMetadataFromHiro();
+        let dbNftData: DatabaseNFTRecord | null = null;
 
         const resolveCandidateUrl = (candidates: Array<string | null | undefined>) => {
           for (const candidate of candidates) {
@@ -464,25 +417,6 @@ export default function NFTDetailPage() {
 
           if (audioSrc) {
             setAudioUrl(audioSrc);
-            if (!audioBlobUrlRef.current && !audioSrc.startsWith('blob:')) {
-              try {
-                const audioRes = await fetch(audioSrc);
-                if (audioRes.ok) {
-                  const arrayBuffer = await audioRes.arrayBuffer();
-                  const uint8Arr = new Uint8Array(arrayBuffer);
-                  if (uint8Arr.length < 10 * 1024 * 1024) {
-                    const b64 = btoa(String.fromCharCode(...uint8Arr));
-                    localStorage.setItem(audioCacheKey, b64);
-                  }
-                  const blob = new Blob([uint8Arr]);
-                  const blobUrl = URL.createObjectURL(blob);
-                  setAudioBlobUrl(blobUrl);
-                  audioBlobUrlRef.current = blobUrl;
-                }
-              } catch {
-                console.log('Failed to cache audio file, using direct URL');
-              }
-            }
           }
 
           const imageSrc = resolveCandidateUrl([
@@ -494,6 +428,7 @@ export default function NFTDetailPage() {
           ]);
 
           if (imageSrc) {
+            setCoverImageLoading(true);
             setCoverImageUrl(imageSrc);
           }
 
@@ -501,8 +436,15 @@ export default function NFTDetailPage() {
         };
 
         let metadataLoaded = false;
-        const hiroMetadata = await fetchMetadataFromHiro();
-        if (hiroMetadata) {
+        dbNftData = await dbPromise;
+        if (dbNftData) {
+          setIsListed(Boolean(dbNftData.is_listed));
+          setListingPrice(typeof dbNftData.list_price === 'number' ? dbNftData.list_price : null);
+          metadataLoaded = await applyMetadataPayload(dbNftData as TokenMetadata);
+        }
+
+        const hiroMetadata = metadataLoaded ? null : await hiroPromise;
+        if (!metadataLoaded && hiroMetadata) {
           metadataLoaded = await applyMetadataPayload(hiroMetadata);
           if (metadataLoaded) {
             console.log('Loaded metadata via Hiro Token Metadata API');
@@ -553,8 +495,9 @@ export default function NFTDetailPage() {
                 }
 
                 try {
-                  const res = await axios.get<TokenMetadata>(metadataUrl, { timeout: 10000 });
-                  metadataLoaded = await applyMetadataPayload(res.data);
+                  const res = await fetch(metadataUrl, { signal: AbortSignal.timeout(10000) });
+                  if (!res.ok) throw new Error(`Metadata request failed: ${res.status}`);
+                  metadataLoaded = await applyMetadataPayload(await res.json());
                 } catch (err) {
                   console.log('Error fetching metadata:', err);
                   setError('Failed to load NFT metadata');
@@ -567,8 +510,8 @@ export default function NFTDetailPage() {
           }
         }
 
-        // Fetch owner separately
-        try {
+        // Owner data enriches the already-visible page and must not block first paint.
+        void (async () => { try {
           const ownerCV = await fetchCallReadOnlyFunction({
             contractAddress: address,
             contractName,
@@ -593,7 +536,7 @@ export default function NFTDetailPage() {
           setOwner(ownerAddr || '');
         } catch (err) {
           console.log('Error fetching owner:', err);
-        }
+        } })();
 
       } catch (err) {
         console.log('Error in fetchNFTData:', err);
@@ -603,15 +546,10 @@ export default function NFTDetailPage() {
       }
     };
 
-    const initializeData = async () => {
-      await fetchNFTData();
-      await fetchNftPrice();
-    };
-
     if (address && contractName && tokenId) {
-      initializeData();
+      void fetchNFTData();
     }
-  }, [address, contractName, tokenId, fetchNftPrice, audioCacheKey, fetchNFTFromDatabase, fetchMetadataFromHiro, stacksNetwork, stacksNetworkName]);
+  }, [address, contractName, tokenId, fetchNFTFromDatabase, fetchMetadataFromHiro, stacksNetwork]);
 
   useEffect(() => {
     const fetchCreatorData = async () => {
@@ -688,16 +626,15 @@ export default function NFTDetailPage() {
 
 
   return (
-    <div className="min-h-screen pt-24 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen pt-20 pb-10">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6">
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-12 gap-8 lg:gap-12">
-          {/* Left Column - NFT Media */}
-          <div className="col-span-12 lg:col-span-7">
+        {/* Compact single-column song layout */}
+        <div className="grid grid-cols-1 gap-6">
+          <div className="contents">
             {/* Audio Player Display */}
-            <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-              {(audioUrl || audioBlobUrl) ? (
+            <div className="relative order-1 mx-auto aspect-square w-full max-w-xl overflow-hidden rounded-xl bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+              {audioUrl ? (
                 <div className="w-full h-full flex items-center justify-center">
                   {/* Cover Art */}
                   {coverImageUrl ? (
@@ -709,7 +646,14 @@ export default function NFTDetailPage() {
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         priority
                         className="object-cover"
+                        onLoad={() => setCoverImageLoading(false)}
+                        onError={() => setCoverImageLoading(false)}
                       />
+                      {coverImageLoading && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30" aria-label="Loading cover image">
+                          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                         <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full p-4">
                           {isPlaying && currentAlbum?.id === `${address}-${contractName}-${tokenId}` ? (
@@ -756,9 +700,9 @@ export default function NFTDetailPage() {
             </div>
 
             {/* Tabs Section */}
-            <div className="mt-8">
+            <div className="order-3 mt-2">
               <div className="border-b border-border">
-                <nav className="flex space-x-8">
+                <nav className="flex gap-5 overflow-x-auto">
                   <button 
                     onClick={() => setActiveTab('overview')}
                     className={`py-3 px-1 font-medium text-sm transition-colors ${
@@ -800,7 +744,7 @@ export default function NFTDetailPage() {
               </div>
 
               {/* Tab Content */}
-              <div className="mt-8 space-y-8">
+              <div className="mt-6 space-y-6">
                 {activeTab === 'overview' && (
                   <>
                     {/* Description */}
@@ -1199,13 +1143,13 @@ export default function NFTDetailPage() {
             </div>
           </div>
 
-          {/* Right Column - NFT Info & Actions */}
-          <div className="col-span-12 lg:col-span-5">
-            <div className="sticky top-6 space-y-6">
+          {/* Song information and actions */}
+          <div className="order-2 mx-auto w-full max-w-xl">
+            <div className="space-y-4">
               {/* Title & Creator */}
               <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="title text-3xl mt-6">{metadata?.name || `Token #${tokenId}`}</h1>
+                    <h1 className="title text-3xl">{metadata?.name || `Token #${tokenId}`}</h1>
                     {metadata?.attributes && Array.isArray(metadata.attributes) && metadata.attributes.find(attr => attr.trait_type === 'Rarity') && (
                       <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30 ml-2">
                         {metadata.attributes.find(attr => attr.trait_type === 'Rarity')?.value || 'Epic'}
@@ -1226,7 +1170,7 @@ export default function NFTDetailPage() {
                   })()}
 
                 {/* Action Buttons */}
-                <div className="flex items-center gap-3 mt-6">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   {/* Loading indicator while checking listing status */}
                   {isLoading && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 rounded-lg">
@@ -1306,7 +1250,7 @@ export default function NFTDetailPage() {
 
               {/* Price & Purchase Section */}
               <Card>
-                <CardContent className="px-6">
+                <CardContent className="p-4">
                   <div className="space-y-0">
                     <div className="space-y-0">
                       {/* Main Collect Button - Only show if not owner and conditions are met */}
@@ -1364,7 +1308,7 @@ export default function NFTDetailPage() {
         </div>
 
         {/* More from this creator */}
-        <div className="mt-16">
+        <div className="mt-10">
           <h2 className="text-2xl font-bold mb-6">More from this creator</h2>
           {creatorNfts.length === 0 ? (
             <div className="text-gray-400">No other songs from this creator.</div>

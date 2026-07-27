@@ -38,6 +38,9 @@ export interface Profile {
   discord?: string;
   instagram?: string;
   linkedin?: string;
+  spotify?: string;
+  soundcloud?: string;
+  audius?: string;
   
   // 3D/Art Portfolio Platforms
   artstation?: string;
@@ -143,69 +146,18 @@ export async function getProfile(address: string): Promise<Profile | null> {
 
 export async function upsertProfile(profile: Partial<Profile> & { address: string }): Promise<Profile> {
   try {
-    // Update last_active timestamp but keep the original address
-    const profileData = {
-      ...profile,
-      // DO NOT overwrite the address - keep the original case
-      last_active: new Date().toISOString()
-    };
+    const response = await fetch('/api/profile/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+    const result = await response.json();
 
-    // First, try to find existing profile with case-insensitive search
-    const { data: existingProfiles } = await supabase
-      .from('profiles')
-      .select('*')
-      .ilike('address', profile.address);
-
-    let data, error;
-
-    if (existingProfiles && existingProfiles.length > 0) {
-      // Update existing profile (use the first match) - keep existing address case
-      const existingProfile = existingProfiles[0];
-      const updateResult = await supabase
-        .from('profiles')
-        .update({
-          ...profileData,
-          // Preserve the existing address case from the database
-          address: existingProfile.address,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingProfile.id)
-        .select()
-        .single();
-      
-      data = updateResult.data;
-      error = updateResult.error;
-      
-    } else {
-      // No existing profile found, create new one with original address case
-      const insertResult = await supabase
-        .from('profiles')
-        .insert({
-          ...profileData,
-          // Keep the original address case for new profiles
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-      
-      data = insertResult.data;
-      error = insertResult.error;
-      
+    if (!response.ok || !result.profile) {
+      throw new Error(result.error || 'Failed to save profile settings');
     }
-    
-    if (error) {
-      console.error('Supabase upsert error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        fullError: JSON.stringify(error, null, 2)
-      });
-      throw new Error(`Database error: ${error.message || error.code || 'Unknown error'}`);
-    }
-    
-    return data;
+
+    return result.profile as Profile;
   } catch (error) {
     console.error('Error upserting profile:', {
       error: error instanceof Error ? error.message : String(error),

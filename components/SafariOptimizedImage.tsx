@@ -56,7 +56,7 @@ export default function SafariOptimizedImage({
           setIsLoading(false);
         })
         .catch((error) => {
-          console.error('Failed to load image with all gateways:', error);
+          console.warn('Failed to load image with all gateways:', error);
           setImageError(true);
           setIsLoading(false);
         });

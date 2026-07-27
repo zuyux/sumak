@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { Upload, X, User, Loader2 } from 'lucide-react';
 import { getIPFSUrl } from '@/lib/pinataUpload';
+import { generateFallbackUrls } from '@/lib/ipfs-utils';
 
 interface ProfilePictureUploadProps {
   currentAvatarUrl?: string;
@@ -21,6 +22,9 @@ export function ProfilePictureUpload({
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [ipfsGatewayIndex, setIpfsGatewayIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,21 +125,43 @@ export function ProfilePictureUpload({
     }
   };
 
-  const displayImage = previewUrl || (currentAvatarCid ? getIPFSUrl(currentAvatarCid) : currentAvatarUrl);
+  const ipfsFallbackUrls = currentAvatarCid
+    ? generateFallbackUrls(getIPFSUrl(currentAvatarCid), 'profile-avatar.webp')
+    : [];
+  const displayImage = previewUrl
+    || (currentAvatarCid ? ipfsFallbackUrls[ipfsGatewayIndex] : currentAvatarUrl);
   const isLoading = isUploading || isRemoving;
+
+  useEffect(() => {
+    setIsImageLoading(Boolean(displayImage));
+    setImageFailed(false);
+    setIpfsGatewayIndex(0);
+  }, [currentAvatarCid, currentAvatarUrl, previewUrl]);
+
+  const handleImageError = () => {
+    if (currentAvatarCid && !previewUrl && ipfsGatewayIndex < ipfsFallbackUrls.length - 1) {
+      setIpfsGatewayIndex((index) => index + 1);
+      setIsImageLoading(true);
+      return;
+    }
+
+    setIsImageLoading(false);
+    setImageFailed(true);
+    setError('The profile image is temporarily unavailable from IPFS.');
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center space-x-4">
         {/* Avatar Display */}
         <div className="relative w-24 h-24 bg-white/10 rounded-full flex items-center justify-center overflow-hidden">
-          {isLoading && (
+          {(isLoading || isImageLoading) && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-              <Loader2 className="w-6 h-6 text-white animate-spin" />
+              <Loader2 className="w-6 h-6 text-white animate-spin" aria-label="Loading profile image" />
             </div>
           )}
           
-          {displayImage ? (
+          {displayImage && !imageFailed ? (
             (currentAvatarCid && !previewUrl) ? (
               <Image
                 src={displayImage}
@@ -144,15 +170,8 @@ export function ProfilePictureUpload({
                 height={96}
                 className="w-24 h-24 rounded-full object-cover"
                 unoptimized
-                onError={(e) => {
-                  console.error('Failed to load IPFS image:', displayImage);
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) {
-                    const icon = parent.querySelector('.fallback-icon');
-                    if (icon) icon.classList.remove('hidden');
-                  }
-                }}
+                onLoad={() => setIsImageLoading(false)}
+                onError={handleImageError}
               />
             ) : (
               // Use Next.js Image for regular URLs and preview images
@@ -162,19 +181,20 @@ export function ProfilePictureUpload({
                 width={96}
                 height={96}
                 className="w-24 h-24 rounded-full object-cover"
+                onLoad={() => setIsImageLoading(false)}
+                onError={handleImageError}
               />
             )
           ) : (
             <User className="w-12 h-12 text-white/60" />
           )}
-          {/* Fallback icon for failed IPFS loads */}
-          <User className="w-12 h-12 text-white/60 fallback-icon hidden" />
         </div>
 
         {/* Upload/Remove Controls */}
         <div className="flex-1 space-y-2">
           <div className="flex items-center space-x-2">
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
               className="flex items-center space-x-2 px-4 py-2 bg-white text-black rounded-lg hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -185,6 +205,7 @@ export function ProfilePictureUpload({
 
             {currentAvatarUrl && (
               <button
+                type="button"
                 onClick={handleRemove}
                 disabled={isLoading}
                 className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
@@ -200,7 +221,7 @@ export function ProfilePictureUpload({
           </p>
 
           {currentAvatarCid && (
-            <div className="text-xs text-white/40 font-mono">
+            <div className="text-xs text-white/40 font-mono select-all">
               IPFS: {currentAvatarCid}
             </div>
           )}

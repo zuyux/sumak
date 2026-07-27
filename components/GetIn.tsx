@@ -23,6 +23,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isSessionLoggedIn, setIsSessionLoggedIn] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const currentAddress = useCurrentAddress();
   // isWalletConnected is true if a wallet address is present
   const isWalletConnected = !!currentAddress;
@@ -32,20 +33,25 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   useEffect(() => {
     if (!currentAddress) {
       setProfile(null);
+      setProfileLoading(false);
       return;
     }
-    
+    let active = true;
+    setProfileLoading(true);
     const fetchProfile = async () => {
       try {
         const profileData = await getProfile(currentAddress);
-        setProfile(profileData);
+        if (active) setProfile(profileData);
       } catch (error) {
         console.error('Failed to fetch profile:', error);
-        setProfile(null);
+        if (active) setProfile(null);
+      } finally {
+        if (active) setProfileLoading(false);
       }
     };
     
-    fetchProfile();
+    void fetchProfile();
+    return () => { active = false; };
   }, [currentAddress]);
 
   useEffect(() => {
@@ -100,7 +106,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
   if (isFullscreen) {
     return (
       <>
-        {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
+        {showUserModal && <UserModal profile={profile} profileLoading={profileLoading} onClose={() => setShowUserModal(false)} />}
         {showConnectModal && <ConnectModal onClose={() => setShowConnectModal(false)} />}
       </>
     );
@@ -147,7 +153,7 @@ export const GetInButton = (buttonProps: GetInButtonProps) => {
             {/* Fallback icon for IPFS load errors */}
             <User className="w-4 h-4 text-white/60 fallback-icon hidden" />
           </button>
-          {showUserModal && <UserModal onClose={() => setShowUserModal(false)} />}
+          {showUserModal && <UserModal profile={profile} profileLoading={profileLoading} onClose={() => setShowUserModal(false)} />}
         </div>
       ) : (
         <div className='fixed top-3 right-2 md:right-4 z-100 flex items-center'>

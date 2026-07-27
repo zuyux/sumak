@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react';
 import { getIPFSUrl } from '@/lib/pinataUpload';
@@ -22,6 +22,7 @@ export function BannerImageUpload({
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isImageLoading, setIsImageLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,6 +137,10 @@ export function BannerImageUpload({
   const currentImageUrl = currentBannerCid ? getIPFSUrl(currentBannerCid) : currentBannerUrl;
   const displayImageUrl = previewUrl || currentImageUrl;
 
+  useEffect(() => {
+    setIsImageLoading(Boolean(displayImageUrl));
+  }, [displayImageUrl]);
+
   return (
     <div className="space-y-4">
       <div className="text-sm font-medium text-accent-foreground">Banner Image</div>
@@ -152,7 +157,11 @@ export function BannerImageUpload({
                 className="w-full h-full object-cover"
                 fill
                 filename="banner-preview.jpg"
-                onError={() => setError('Failed to load banner image')}
+                onLoad={() => setIsImageLoading(false)}
+                onError={() => {
+                  setIsImageLoading(false);
+                  setError('Failed to load banner image');
+                }}
               />
             ) : (
               // Use Next.js Image for regular URLs
@@ -161,13 +170,24 @@ export function BannerImageUpload({
                 alt="Banner Preview"
                 fill
                 className="object-cover"
-                onError={() => setError('Failed to load banner image')}
+                onLoad={() => setIsImageLoading(false)}
+                onError={() => {
+                  setIsImageLoading(false);
+                  setError('Failed to load banner image');
+                }}
               />
+            )}
+
+            {(isImageLoading || isUploading || isRemoving) && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
+                <Loader2 className="h-7 w-7 animate-spin text-white" aria-label="Loading banner image" />
+              </div>
             )}
             
             {/* Remove button */}
             {(currentBannerCid || currentBannerUrl) && !previewUrl && (
               <button
+                type="button"
                 onClick={handleRemove}
                 disabled={isRemoving}
                 className="absolute top-2 right-2 p-2 bg-red-600 hover:bg-red-700 text-accent-background disabled:bg-red-600/50 rounded-lg transition-colors"
@@ -184,6 +204,7 @@ export function BannerImageUpload({
             {/* Cancel preview button */}
             {previewUrl && (
               <button
+                type="button"
                 onClick={cancelPreview}
                 className="absolute top-2 right-2 p-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors"
                 title="Cancel"
@@ -220,6 +241,7 @@ export function BannerImageUpload({
         
         {previewUrl && (
           <button
+            type="button"
             onClick={handleUpload}
             disabled={isUploading}
             className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-background rounded-lg transition-colors text-sm cursor-pointer"

@@ -164,6 +164,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const contractAddress = searchParams.get('contractAddress');
+    const contractName = searchParams.get('contractName');
     const tokenId = searchParams.get('tokenId');
     const creatorAddress = searchParams.get('creatorAddress');
     
@@ -173,6 +174,9 @@ export async function GET(request: NextRequest) {
       query = query
         .eq('contract_address', contractAddress)
         .eq('token_id', parseInt(tokenId));
+      if (contractName) {
+        query = query.eq('contract_name', contractName);
+      }
     } else if (creatorAddress) {
       query = query
         .eq('creator_address', creatorAddress)
@@ -193,10 +197,10 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({
-      success: true,
-      data: data || []
-    });
+    return NextResponse.json(
+      { success: true, data: data || [] },
+      { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=60' } }
+    );
     
   } catch (error) {
     console.error('API error:', error);

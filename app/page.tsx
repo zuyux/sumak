@@ -45,9 +45,9 @@ export default function HomePage() {
         <div className="grid items-end gap-12 lg:grid-cols-[1.25fr_.75fr]">
           <div>
             <h1 className="title max-w-5xl text-[clamp(4rem,12vw,10rem)] leading-[0.78] tracking-[-0.06em]">
-              MUSIC,
+              MUSIC
               <br />
-              <span className="text-white/35">WITH VALUE.</span>
+              <span className="text-white">WITH VALUE</span>
             </h1>
           </div>
 

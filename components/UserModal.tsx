@@ -8,20 +8,24 @@ import Image from "next/image";
 import { LoaderCircle } from "lucide-react";
 import { getPersistedNetwork, resolveNetwork } from '@/lib/network';
 import { getApiUrl } from '@/lib/stacks-api';
-import { getProfile, Profile } from '@/lib/profileApi';
+import { Profile } from '@/lib/profileApi';
 import { getIPFSUrl } from '@/lib/pinataUpload';
 import SafariOptimizedImage from './SafariOptimizedImage';
 import { getSBTCContract } from '@/lib/contracts';
 
 interface UserModalProps {
   onClose: () => void;
+  profile: Profile | null;
+  profileLoading: boolean;
 }
 
-export default function UserModal({ onClose }: UserModalProps) {
+const BALANCE_CACHE_TTL = 30_000;
+const balanceCache = new Map<string, { value: string; expiresAt: number }>();
+
+export default function UserModal({ onClose, profile, profileLoading }: UserModalProps) {
   const { address, setAddress } = useWallet();
   const [sbtcBalance, setSbtcBalance] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [usernameLoader, setUsernameLoader] = useState<boolean>(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
   const router = useRouter();
   const currentAddress = address;
   const modalRef = useRef<HTMLDivElement>(null);
@@ -50,19 +54,24 @@ export default function UserModal({ onClose }: UserModalProps) {
     const network = resolveNetwork(persistedNetwork, currentAddress);
     const baseApiUrl = getApiUrl(network);
     const apiUrl = `${baseApiUrl}/extended/v1/address/${currentAddress}/balances?unanchored=false`;
+    const cacheKey = `${network}:${currentAddress}`;
+    const cached = balanceCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      setSbtcBalance(cached.value);
+      return;
+    }
+
+    setSbtcBalance(null);
+    const controller = new AbortController();
     
     const fetchBalance = async () => {
       try {
-        console.log(`Fetching SBTC balance for ${currentAddress} on ${network}:`, apiUrl);
-        const res = await fetch(apiUrl, { method: "GET" });
+        const res = await fetch(apiUrl, { method: "GET", signal: controller.signal });
+        if (!res.ok) throw new Error(`Balance request failed: ${res.status}`);
         const data = await res.json();
         
         // Look for SBTC token in fungible_tokens
         let sbtcTokenBalance = '0';
-        
-        // Debug: Log all available tokens
-        console.log('UserModal - All fungible tokens:', data.fungible_tokens);
-        console.log('UserModal - Available token keys:', Object.keys(data.fungible_tokens || {}));
         
         // The network-aware sBTC token identifier
         const sbtcTokenKey = getSBTCContract(network);
@@ -81,47 +90,29 @@ export default function UserModal({ onClose }: UserModalProps) {
           );
           
           if (sbtcKey) {
-            console.log('UserModal - Found potential sBTC token with key:', sbtcKey);
             const balance = data.fungible_tokens[sbtcKey].balance;
             sbtcTokenBalance = Number(balance).toLocaleString();
-          } else {
-            console.log('UserModal - No sBTC token found in wallet');
           }
         }
-        
-        console.log('UserModal - SBTC Balance data:', data.fungible_tokens);
-        console.log('UserModal - SBTC Balance:', sbtcTokenBalance);
-        
+
+        balanceCache.set(cacheKey, {
+          value: sbtcTokenBalance,
+          expiresAt: Date.now() + BALANCE_CACHE_TTL,
+        });
         setSbtcBalance(sbtcTokenBalance);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error('Failed to fetch SBTC balance:', error);
         setSbtcBalance('--');
       }
     };
-    fetchBalance();
+    void fetchBalance();
+    return () => controller.abort();
   }, [currentAddress]);
 
-  // Fetch profile for avatar display
   useEffect(() => {
-    if (!currentAddress) {
-      setProfile(null);
-      setUsernameLoader(false);
-      return;
-    }
-    setUsernameLoader(true);
-    const fetchProfile = async () => {
-      try {
-        const profileData = await getProfile(currentAddress);
-        setProfile(profileData);
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-        setProfile(null);
-      } finally {
-        setUsernameLoader(false);
-      }
-    };
-    fetchProfile();
-  }, [currentAddress]);
+    setAvatarLoading(Boolean(profile?.avatar_cid || profile?.avatar_url));
+  }, [profile?.avatar_cid, profile?.avatar_url]);
 
   const truncateMiddle = (str: string | null) => {
     if (!str) return '';
@@ -194,14 +185,14 @@ export default function UserModal({ onClose }: UserModalProps) {
             className="title mr-4 text-right text-gray-900 dark:text-white text-xl font-bold tracking-wider flex-1 cursor-pointer select-none"
             onClick={onClose}
           >
-            {usernameLoader ? (
+            {profileLoading ? (
               <LoaderCircle className="animate-spin inline-block align-middle text-black dark:text-white" size={22} />
             ) : (profile?.username || profile?.display_name ? (profile?.username || profile?.display_name) : truncateMiddle(currentAddress))}
           </Link>
           <div className='flex'>
             <button
               type="button"
-              className="w-9 h-9 bg-gradient-to-br from-[#111] to-[#333] border-[1px] border-[#555] rounded-full overflow-hidden cursor-pointer select-none flex items-center justify-center"
+              className="relative w-9 h-9 bg-gradient-to-br from-[#111] to-[#333] border-[1px] border-[#555] rounded-full overflow-hidden cursor-pointer select-none flex items-center justify-center"
               onClick={onClose}
               aria-label="Profile"
             >
@@ -213,7 +204,9 @@ export default function UserModal({ onClose }: UserModalProps) {
                   height={36}
                   className="w-full h-full object-cover"
                   filename="user-avatar.jpg"
+                  onLoad={() => setAvatarLoading(false)}
                   onError={() => {
+                    setAvatarLoading(false);
                     console.error('Failed to load IPFS avatar with all gateways');
                   }}
                 />
@@ -224,9 +217,16 @@ export default function UserModal({ onClose }: UserModalProps) {
                   width={36}
                   height={36}
                   className="w-full h-full object-cover"
+                  onLoad={() => setAvatarLoading(false)}
+                  onError={() => setAvatarLoading(false)}
                 />
               ) : (
                 <User className="w-4 h-4 text-gray-400 dark:text-white/60" />
+              )}
+              {avatarLoading && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <LoaderCircle className="animate-spin text-white" size={16} />
+                </span>
               )}
             </button>
           </div>

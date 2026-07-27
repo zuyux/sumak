@@ -289,22 +289,30 @@ html, body {
 
   /* Dark theme for Leaflet map */
   .dark-map .leaflet-tile {
-    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+    filter: grayscale(1) invert(1) brightness(0.62) contrast(1.35);
+  }
+
+  .dark-map.leaflet-container {
+    background: #171717;
   }
   
   .dark-map .leaflet-control-attribution {
-    background: rgba(0, 0, 0, 0.8);
-    color: #ccc;
+    background: rgba(23, 23, 23, 0.9);
+    color: #a3a3a3;
+  }
+
+  .dark-map .leaflet-control-attribution a {
+    color: #d4d4d4;
   }
   
   .dark-map .leaflet-control-zoom a {
-    background-color: #333;
-    color: #fff;
-    border-color: #555;
+    background-color: #262626;
+    color: #e5e5e5;
+    border-color: #404040;
   }
   
   .dark-map .leaflet-control-zoom a:hover {
-    background-color: #555;
+    background-color: #404040;
   }
 }
 
@@ -449,6 +457,36 @@ img {
   height: auto;
 }
 
+/* Leaflet creates its controls and tiles at runtime. Keep these rules outside
+   Tailwind layers so they are never scoped or removed during compilation. */
+.dark-map.leaflet-container {
+  background-color: #d4d4d4 !important;
+}
+
+.dark-map .osm-dark-tile,
+.dark-map .leaflet-tile {
+  filter: grayscale(1) brightness(0.92) contrast(0.9) !important;
+}
+
+.dark-map .leaflet-control-attribution {
+  background-color: rgb(229 229 229 / 92%) !important;
+  color: #525252 !important;
+}
+
+.dark-map .leaflet-control-attribution a {
+  color: #262626 !important;
+}
+
+.dark-map .leaflet-control-zoom a {
+  background-color: #e5e5e5 !important;
+  border-color: #a3a3a3 !important;
+  color: #262626 !important;
+}
+
+.dark-map .leaflet-control-zoom a:hover {
+  background-color: #d4d4d4 !important;
+}
+
 /* Prevent iOS zoom on double tap */
 * {
   -webkit-touch-callout: none;
@@ -456,4 +494,3 @@ img {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-

@@ -7,9 +7,23 @@ import { useCurrentAddress } from '@/hooks/useCurrentAddress';
 import { getProfile, Profile } from '@/lib/profileApi';
 import { getNftsByCreator } from '@/lib/nftApi';
 import Image from 'next/image';
-import { User, MapPin, Globe, Pen, LoaderCircle } from 'lucide-react';
+import { Box, Brush, Globe, Instagram, Linkedin, LoaderCircle, MapPin, Palette, Pen, User } from 'lucide-react';
 import { getIPFSUrl } from '@/lib/pinataUpload';
 import SafariOptimizedImage from '@/components/SafariOptimizedImage';
+import LocationMapModal from '@/components/LocationMapModal';
+
+function parseCoordinates(value?: string): { lat: number; lng: number } | undefined {
+  if (!value) return undefined;
+
+  const match = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (!match) return undefined;
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+    ? { lat, lng }
+    : undefined;
+}
 
 // NFT data structure from Supabase
 interface NFT {
@@ -109,6 +123,8 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
   mintedCount?: number;
 }) {
   const [scrollY, setScrollY] = useState(0);
+  const [isLocationMapOpen, setIsLocationMapOpen] = useState(false);
+  const profileLocation = parseCoordinates(profile?.location);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -145,11 +161,11 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
           {/* Profile info */}
           <div className="text-center space-y-6 max-w-2xl">
             <div className="space-y-3">
-              <h1 className="text-5xl font-bold text-white drop-shadow-lg">
+              <h1 className="text-sm font-bold text-white drop-shadow-lg">
                 {address.substring(0, 8)}...{address.substring(address.length - 8)}
               </h1>
 
-              <p className="text-lg text-white/70 font-mono bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full inline-block">
+              <p className="text-sm text-white/70 font-mono bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full inline-block">
                 {address.substring(0, 8)}...{address.substring(address.length - 8)}
               </p>
 
@@ -258,10 +274,6 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
               <p className="text-2xl text-white/90 drop-shadow">@{profile.username}</p>
             )}
 
-            <p className="text-lg text-white/70 font-mono bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full inline-block">
-              {address.substring(0, 8)}...{address.substring(address.length - 8)}
-            </p>
-
             <div className="flex items-center justify-center space-x-6 text-lg text-white/80">
               {mintedCount > 0 && (
                 <span className="bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
@@ -271,25 +283,28 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-4 text-white/70">
-            {profile.location && (
-              <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                <MapPin className="w-5 h-5" />
-                <span>{profile.location}</span>
-              </div>
-            )}
-          </div>
-
           <div className="flex flex-wrap justify-center gap-4">
+            {profileLocation && profile.show_location !== false && (
+              <button
+                type="button"
+                onClick={() => setIsLocationMapOpen(true)}
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Show location on map"
+                title="Location"
+              >
+                <MapPin className="h-5 w-5" />
+              </button>
+            )}
             {profile.website && (
               <a
                 href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Visit website"
+                title="Website"
               >
                 <Globe className="w-5 h-5" />
-                <span>Website</span>
               </a>
             )}
             {profile.artstation && (
@@ -297,9 +312,11 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.artstation.startsWith('http') ? profile.artstation : `https://${profile.artstation}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View ArtStation profile"
+                title="ArtStation"
               >
-                ArtStation
+                <Palette className="h-5 w-5" />
               </a>
             )}
             {profile.sketchfab && (
@@ -307,9 +324,11 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.sketchfab.startsWith('http') ? profile.sketchfab : `https://${profile.sketchfab}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View Sketchfab profile"
+                title="Sketchfab"
               >
-                Sketchfab
+                <Box className="h-5 w-5" />
               </a>
             )}
             {profile.behance && (
@@ -317,19 +336,59 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.behance.startsWith('http') ? profile.behance : `https://${profile.behance}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View Behance profile"
+                title="Behance"
               >
-                Behance
+                <Brush className="h-5 w-5" />
               </a>
             )}
             {profile.twitter && (
               <a
-                href={`https://twitter.com/${profile.twitter.replace('@', '')}`}
+                href={`https://x.com/${profile.twitter.replace('@', '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View profile on X"
+                title="X"
               >
-                Twitter
+                <Image
+                  src="/x.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 brightness-0 invert"
+                />
+              </a>
+            )}
+            {profile.instagram && (
+              <a
+                href={profile.instagram.startsWith('http') ? profile.instagram : `https://instagram.com/${profile.instagram.replace('@', '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View Instagram profile"
+                title="Instagram"
+              >
+                <Instagram className="h-5 w-5" />
+              </a>
+            )}
+            {profile.discord && (
+              <a
+                href={profile.discord.startsWith('http') ? profile.discord : 'https://discord.com'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Open Discord"
+                title={`Discord: ${profile.discord}`}
+              >
+                <Image
+                  src="/discord.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 brightness-0 invert"
+                />
               </a>
             )}
             {profile.linkedin && (
@@ -337,14 +396,65 @@ function ProfileDisplay({ profile, address, isOwnProfile, mintedCount = 0 }: {
                 href={profile.linkedin.startsWith('http') ? profile.linkedin : `https://${profile.linkedin}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/70 hover:text-white transition-colors bg-black/20 backdrop-blur-sm px-4 py-2 rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="View LinkedIn profile"
+                title="LinkedIn"
               >
-                LinkedIn
+                <Linkedin className="h-5 w-5" />
+              </a>
+            )}
+            {profile.spotify && (
+              <a
+                href={profile.spotify}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Listen on Spotify"
+                title="Spotify"
+              >
+                <Image src="/spotify.svg" alt="" width={20} height={20} className="h-5 w-5 brightness-0 invert" />
+              </a>
+            )}
+            {profile.soundcloud && (
+              <a
+                href={profile.soundcloud.startsWith('http')
+                  ? profile.soundcloud
+                  : `https://soundcloud.com/${profile.soundcloud.replace(/^@/, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Listen on SoundCloud"
+                title="SoundCloud"
+              >
+                <Image src="/soundcloud.svg" alt="" width={20} height={20} className="h-5 w-5 brightness-0 invert" />
+              </a>
+            )}
+            {profile.audius && (
+              <a
+                href={profile.audius.startsWith('http')
+                  ? profile.audius
+                  : `https://audius.co/${profile.audius.replace(/^@/, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40"
+                aria-label="Listen on Audius"
+                title="Audius"
+              >
+                <Image src="/audius.svg" alt="" width={20} height={20} className="h-5 w-5 brightness-0 invert" />
               </a>
             )}
           </div>
         </div>
       </div>
+
+      {profileLocation && (
+        <LocationMapModal
+          isOpen={isLocationMapOpen}
+          onClose={() => setIsLocationMapOpen(false)}
+          initialLocation={profileLocation}
+          showCoordinates={false}
+        />
+      )}
     </div>
   );
 }

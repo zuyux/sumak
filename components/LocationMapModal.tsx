@@ -9,13 +9,15 @@ interface LocationMapModalProps {
   onClose: () => void;
   initialLocation?: { lat: number; lng: number };
   onLocationSelect?: (location: { lat: number; lng: number }) => void;
+  showCoordinates?: boolean;
 }
 
 export default function LocationMapModal({
   isOpen,
   onClose,
   initialLocation,
-  onLocationSelect
+  onLocationSelect,
+  showCoordinates = true
 }: LocationMapModalProps) {
   const [mapLoading, setMapLoading] = useState<boolean>(true);
   const [currentLat, setCurrentLat] = useState<string>('');
@@ -66,7 +68,8 @@ export default function LocationMapModal({
 
       // Add tile layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+        attribution: '© OpenStreetMap contributors',
+        className: 'osm-dark-tile'
       }).addTo(map);
 
       // Add draggable marker
@@ -146,11 +149,12 @@ export default function LocationMapModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#000] border border-[#333] rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-labelledby="location-map-title" className="bg-[#000] border border-[#333] rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#333]">
-          <h2 className="text-xl font-semibold text-white">Select NFT Location</h2>
+          <h2 id="location-map-title" className="text-xl font-semibold text-white">Select Location</h2>
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={onClose}
@@ -196,6 +200,7 @@ export default function LocationMapModal({
               </div>
               <div className="flex gap-2">
                 <Button
+                  type="button"
                   onClick={handleGetCurrentLocation}
                   variant="outline"
                   className="flex-1 border-[#333] text-white bg-transparent hover:bg-[#222] cursor-pointer"
@@ -204,6 +209,7 @@ export default function LocationMapModal({
                   Use Current Location
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => {
                     const lat = parseFloat(currentLat);
                     const lng = parseFloat(currentLng);
@@ -213,7 +219,7 @@ export default function LocationMapModal({
                     }
                   }}
                   disabled={!currentLat || !currentLng || isNaN(parseFloat(currentLat)) || isNaN(parseFloat(currentLng))}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Set Location
                 </Button>
@@ -222,9 +228,9 @@ export default function LocationMapModal({
           )}
 
           {/* Current coordinates display */}
-          {currentLat && currentLng && !onLocationSelect && (
+          {showCoordinates && currentLat && currentLng && !onLocationSelect && (
             <div className="mb-4 p-3 bg-[#111] border border-[#333] rounded-lg">
-              <p className="text-gray-400 text-sm mb-1">NFT Coordinates:</p>
+              <p className="text-gray-400 text-sm mb-1">Coordinates:</p>
               <p className="text-white font-mono text-sm">
                 Lat: {parseFloat(currentLat).toFixed(6)}, Lng: {parseFloat(currentLng).toFixed(6)}
               </p>
@@ -251,22 +257,17 @@ export default function LocationMapModal({
             {/* Map container */}
             <div 
               ref={mapRef} 
-              className="w-full h-full"
+              className="dark-map w-full h-full bg-[#d4d4d4]"
               style={{ zIndex: 1 }}
             />
             
-            {/* Instructions overlay */}
-            {!mapLoading && onLocationSelect && (
-              <div className="absolute top-2 left-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-[1000] max-w-48">
-                💡 Click on the map or drag the marker to set location
-              </div>
-            )}
           </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 mt-4">
             {currentLat && currentLng && !isNaN(parseFloat(currentLat)) && !isNaN(parseFloat(currentLng)) && (
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => {
                   const lat = parseFloat(currentLat);
@@ -277,7 +278,6 @@ export default function LocationMapModal({
                 className="border-[#333] text-white bg-black hover:bg-[#222] cursor-pointer"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Open in OSM
               </Button>
             )}
           </div>
