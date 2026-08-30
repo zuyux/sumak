@@ -338,24 +338,34 @@ export default function PersistentPlayer() {
             onClick={closeImageModal}
           >
             <div className="relative w-screen h-screen">
-              <div className="relative w-full h-full">
+              <div className="relative flex items-center justify-center w-full h-full">
                 <Image
                   src={imageError ? '/SUMAK.png' : currentAlbum.metadata.image}
                   alt={getTitle(currentAlbum.metadata)}
-                  fill
+                  width={1200}
+                  height={1200}
                   priority
-                  className="object-contain w-full h-full"
+                  className="object-contain"
+                  style={{
+                    width: 'auto',
+                    height: 'auto',
+                    maxWidth: '100%',
+                    maxHeight: '58vh',
+                    display: 'block',
+                    marginTop: '21%',
+                    marginBottom: '21%'
+                  }}
                   onLoad={handleModalImageLoad}
                   onError={handleImageError}
                 />
-              </div>
-              {modalImageLoading && (
-                <div className="absolute inset-0 z-70 flex items-center justify-center pointer-events-none">
-                  <div className="cover-spinner" role="status" aria-live="polite">
-                    <span className="sr-only">Loading cover</span>
+                {modalImageLoading && (
+                  <div className="absolute inset-0 z-70 flex items-center justify-center pointer-events-none">
+                    <div className="cover-spinner" role="status" aria-live="polite">
+                      <span className="sr-only">Loading cover</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <button
                 onClick={(e) => { e.stopPropagation(); closeImageModal(); }}
